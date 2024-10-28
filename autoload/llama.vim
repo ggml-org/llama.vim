@@ -5,6 +5,7 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 " general parameters:
 "
 "   endpoint:         llama.cpp server endpoint
+"   api_key:          llama.cpp server api key (optional)
 "   n_prefix:         number of lines before the cursor location to include in the local prefix
 "   n_suffix:         number of lines after  the cursor location to include in the local suffix
 "   n_predict:        max number of tokens to predict
@@ -33,6 +34,7 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "
 let s:default_config = {
     \ 'endpoint':         'http://127.0.0.1:8012/infill',
+    \ 'api_key':          '',
     \ 'n_prefix':         256,
     \ 'n_suffix':         64,
     \ 'n_predict':        128,
@@ -309,6 +311,9 @@ function! s:ring_update()
         \ "--header", "Content-Type: application/json",
         \ "--data", l:request
         \ ]
+    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+        call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
+    endif
 
     " no callbacks because we don't need to process the response
     if s:ghost_text_nvim
@@ -419,6 +424,9 @@ function! llama#fim(is_auto) abort
         \ "--header", "Content-Type: application/json",
         \ "--data", l:request
         \ ]
+    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+        call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
+    endif
 
     if s:current_job != v:null
         if s:ghost_text_nvim
