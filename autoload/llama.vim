@@ -707,8 +707,9 @@ function! s:fim_on_stdout(pos_x, pos_y, is_auto, job_id, data, event = v:null)
             \ 'virt_text_win_col': virtcol('.')
             \ })
     elseif s:ghost_text_vim
-        let l:new_suffix = s:content[0]
-        if !empty(l:new_suffix)
+        let l:full_suffix = s:content[0]
+        if !empty(l:full_suffix)
+	    let l:new_suffix = l:full_suffix[0:-len(getline('.')[col('.')-1:])-1]
             call prop_add(s:pos_y, s:pos_x + 1, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': l:new_suffix
