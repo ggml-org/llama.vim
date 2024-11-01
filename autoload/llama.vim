@@ -98,6 +98,7 @@ function! llama#init()
     let s:t_last_move = reltime() " last time the cursor moved
 
     let s:current_job = v:null
+    let s:job_error = 0
 
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
     let s:ghost_text_vim = has('textprop')
@@ -435,6 +436,7 @@ function! llama#fim(is_auto) abort
             call job_stop(s:current_job)
         endif
     endif
+    let s:job_error = 0
 
     " send the request asynchronously
     if s:ghost_text_nvim
@@ -532,7 +534,7 @@ function! s:fim_on_stdout(pos_x, pos_y, is_auto, job_id, data, event = v:null)
         return
     endif
 
-    if v:shell_error || len(l:raw) == 0
+    if s:job_error || len(l:raw) == 0
         let l:raw = json_encode({'content': '  llama.vim : cannot reach llama.cpp server. (:help llama)'})
 
         let s:can_accept = v:false
@@ -744,5 +746,6 @@ function! s:fim_on_exit(job_id, exit_code, event = v:null)
         echom "Job failed with exit code: " . a:exit_code
     endif
 
+    let s:job_error = a:exit_code
     let s:current_job = v:null
 endfunction
