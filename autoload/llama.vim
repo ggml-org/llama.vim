@@ -727,7 +727,6 @@ function! s:fim_on_stdout(pos_x, pos_y, is_auto, job_id, data, event = v:null)
             call prop_add(s:pos_y, 0, {
                 \ 'type': s:hlgroup_info,
                 \ 'text': l:info,
-                \ 'text_padding_left': col('$'),
                 \ 'text_wrap': 'truncate'
                 \ })
         endif
