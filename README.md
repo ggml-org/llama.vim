@@ -22,21 +22,34 @@ Local LLM-assisted text completion.
 
 ## Installation
 
-### vim-plug
+### Plugin setup
+
+#### vim-plug
 
 ```vim
 Plug 'ggml-org/llama.vim'
 ```
 
+#### Vundle
+
+```bash
+cd ~/.vim/bundle
+git clone https://github.com/ggml-org/llama.vim
+```
+
+Then add `Plugin 'llama.vim'` to your *.vimrc* in the `vundle#begin()` section.
+
+### llama.cpp setup
+
 The plugin requires a [llama.cpp](https://github.com/ggerganov/llama.cpp) server instance to be running at [`g:llama_config.endpoint`](https://github.com/ggml-org/llama.vim/blob/7d3359077adbad4c05872653973c3ceb09f18ad9/autoload/llama.vim#L34-L36)
 
-### Mac OS
+#### Mac OS
 
 ```bash
 brew install llama.cpp
 ```
 
-### Any other OS
+#### Any other OS
 
 Either build from source or use the latest binaries: https://github.com/ggerganov/llama.cpp/releases
 
