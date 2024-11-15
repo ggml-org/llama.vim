@@ -477,10 +477,10 @@ function! llama#fim_accept(accept_type)
 
         " insert suggestion on current line
         if a:accept_type != 'word'
-            " insert first line of content
+            " insert first line of suggestion
             call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . s:content[0])
         else
-            " insert first word of content
+            " insert first word of suggestion
             let l:word = matchstr(s:content[0], '^\s*\S\+')
             call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . l:word)
         endif
