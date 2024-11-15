@@ -310,7 +310,7 @@ function! s:ring_update()
         \ "--request", "POST",
         \ "--url", g:llama_config.endpoint,
         \ "--header", "Content-Type: application/json",
-        \ "--data", l:request
+        \ "--data", "'". l:request ."'"
         \ ]
     if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
@@ -423,7 +423,7 @@ function! llama#fim(is_auto) abort
         \ "--request", "POST",
         \ "--url", g:llama_config.endpoint,
         \ "--header", "Content-Type: application/json",
-        \ "--data", l:request
+        \ "--data", "'". l:request ."'"
         \ ]
     if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
