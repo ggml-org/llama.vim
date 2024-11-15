@@ -469,23 +469,39 @@ function! llama#fim(is_auto) abort
     endif
 endfunction
 
-" if first_line == v:true accept only the first line of the response
-function! llama#fim_accept(first_line)
-    " insert the suggestion at the cursor location
+" if accept_type == 'full', accept entire response
+" if accept_type == 'line', accept only the first line of the response
+" if accept_type == 'word', accept only the first word of the response
+function! llama#fim_accept(accept_type)
     if s:can_accept && len(s:content) > 0
-        call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . s:content[0])
-        if len(s:content) > 1
-            if !a:first_line
-                call append(s:pos_y, s:content[1:-1])
-            endif
+
+        " insert suggestion on current line
+        if a:accept_type != 'word'
+            " insert first line of content
+            call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . s:content[0])
+        else
+            " insert first word of content
+            let l:word = matchstr(s:content[0], '^\s*\S\+')
+            call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . l:word)
         endif
 
-        " move the cursor to the end of the accepted text
-        if !a:first_line && len(s:content) > 1
-            call cursor(s:pos_y + len(s:content) - 1, s:pos_x + s:pos_dx + 1)
-        else
-            call cursor(s:pos_y, s:pos_x + len(s:content[0]))
+        " insert rest of suggestion
+        if len(s:content) > 1 && a:accept_type == 'full'
+            call append(s:pos_y, s:content[1:-1])
         endif
+
+        " move cusor
+        if a:accept_type == 'word'
+            " move cursor to end of word
+            call cursor(s:pos_y, s:pos_x + len(l:word))
+        elseif a:accept_type == 'line' || len(s:content) == 1
+            " move cursor for 1-line suggestion
+            call cursor(s:pos_y, s:pos_x + len(s:content[0]))
+        else
+            " move cursor for multi-line suggestion
+            call cursor(s:pos_y + len(s:content) - 1, s:pos_x + s:pos_dx + 1)
+        endif
+
     endif
 
     call llama#fim_cancel()
@@ -712,7 +728,7 @@ function! s:fim_on_stdout(pos_x, pos_y, is_auto, job_id, data, event = v:null)
     elseif s:ghost_text_vim
         let l:full_suffix = s:content[0]
         if !empty(l:full_suffix)
-	    let l:new_suffix = l:full_suffix[0:-len(getline('.')[col('.')-1:])-1]
+            let l:new_suffix = l:full_suffix[0:-len(getline('.')[col('.')-1:])-1]
             call prop_add(s:pos_y, s:pos_x + 1, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': l:new_suffix
@@ -736,8 +752,9 @@ function! s:fim_on_stdout(pos_x, pos_y, is_auto, job_id, data, event = v:null)
     endif
 
     " setup accept shortcuts
-    inoremap <buffer> <Tab>   <C-O>:call llama#fim_accept(v:false)<CR>
-    inoremap <buffer> <S-Tab> <C-O>:call llama#fim_accept(v:true)<CR>
+    inoremap <buffer> <Tab>   <C-O>:call llama#fim_accept('full')<CR>
+    inoremap <buffer> <S-Tab> <C-O>:call llama#fim_accept('line')<CR>
+    inoremap <buffer> <C-B>   <C-O>:call llama#fim_accept('word')<CR>
 
     let s:hint_shown = v:true
 endfunction
