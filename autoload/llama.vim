@@ -39,7 +39,7 @@ let s:default_config = {
     \ 'n_suffix':         64,
     \ 'n_predict':        128,
     \ 't_max_prompt_ms':  500,
-    \ 't_max_predict_ms': 2000,
+    \ 't_max_predict_ms': 500,
     \ 'show_info':        2,
     \ 'auto_fim':         v:true,
     \ 'max_line_suffix':  8,
