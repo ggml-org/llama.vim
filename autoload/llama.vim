@@ -481,8 +481,9 @@ function! llama#fim_accept(accept_type)
             call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . s:content[0])
         else
             " insert first word of suggestion
-            let l:word = matchstr(s:content[0], '^\s*\S\+')
-            call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . l:word)
+            let l:suffix = s:line_cur[(s:pos_x):]
+            let l:word = matchstr(s:content[0][:-(len(l:suffix) + 1)], '^\s*\S\+')
+            call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . l:word . l:suffix)
         endif
 
         " insert rest of suggestion
@@ -493,7 +494,7 @@ function! llama#fim_accept(accept_type)
         " move cusor
         if a:accept_type == 'word'
             " move cursor to end of word
-            call cursor(s:pos_y, s:pos_x + len(l:word))
+            call cursor(s:pos_y, s:pos_x + len(l:word) + 1)
         elseif a:accept_type == 'line' || len(s:content) == 1
             " move cursor for 1-line suggestion
             call cursor(s:pos_y, s:pos_x + len(s:content[0]))
