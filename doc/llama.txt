@@ -5,7 +5,7 @@ LLM-based text completion using llama.cpp
 
 Requires:
 
-- neovim or vim
+- neovim or vim 9.1+
 - curl
 - llama.cpp server instance
 - FIM-compatible model

@@ -104,6 +104,9 @@ function! llama#init()
     let s:ghost_text_vim = has('textprop')
 
     if s:ghost_text_vim
+        if version < 901
+            echom 'Warning: llama.vim requires version 901 or greater. Current version: ' . version
+        endif
         let s:hlgroup_hint = 'llama_hl_hint'
         let s:hlgroup_info = 'llama_hl_info'
 
