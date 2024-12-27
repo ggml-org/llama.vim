@@ -14,6 +14,7 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
 "   auto_fim:         trigger FIM completion automatically on cursor movement
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
+"   max_cache_keys:   max number of cached completions to keep in result_cache
 "
 " ring buffer of chunks, accumulated with time upon:
 "
@@ -43,6 +44,7 @@ let s:default_config = {
     \ 'show_info':        2,
     \ 'auto_fim':         v:true,
     \ 'max_line_suffix':  8,
+    \ 'max_cache_keys':   250,
     \ 'ring_n_chunks':    16,
     \ 'ring_chunk_size':  64,
     \ 'ring_scope':       1024,
@@ -441,18 +443,29 @@ function! llama#fim(is_auto) abort
     endif
     let s:job_error = 0
 
-    " send the request asynchronously
-    if s:ghost_text_nvim
-        let s:current_job = jobstart(l:curl_command, {
-            \ 'on_stdout': function('s:fim_on_stdout', [s:pos_x, s:pos_y, a:is_auto]),
-            \ 'on_exit':   function('s:fim_on_exit'),
-            \ 'stdout_buffered': v:true
-            \ })
-    elseif s:ghost_text_vim
-        let s:current_job = job_start(l:curl_command, {
-            \ 'out_cb':    function('s:fim_on_stdout', [s:pos_x, s:pos_y, a:is_auto]),
-            \ 'exit_cb':   function('s:fim_on_exit')
-            \ })
+    " Construct hash from prefix, suffix, and prompt
+    let l:request_context = l:prefix . "|" . l:suffix . "|" . l:prompt
+    let l:hash = sha256(l:request_context) 
+
+   " Check if the completion is cached 
+    let l:cached_completion = get(g:result_cache, l:hash , v:null)
+
+    if l:cached_completion != v:null
+        call s:fim_on_stdout(l:hash, s:pos_x, s:pos_y, a:is_auto, 0, l:cached_completion)
+    else
+        " send the request asynchronously
+        if s:ghost_text_nvim
+            let s:current_job = jobstart(l:curl_command, {
+                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, s:pos_x, s:pos_y, a:is_auto]),
+                \ 'on_exit':   function('s:fim_on_exit'),
+                \ 'stdout_buffered': v:true
+                \ })
+        elseif s:ghost_text_vim
+            let s:current_job = job_start(l:curl_command, {
+                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, s:pos_x, s:pos_y, a:is_auto]),
+                \ 'exit_cb':   function('s:fim_on_exit')
+                \ })
+        endif
     endif
 
     " TODO: per-file location
@@ -538,11 +551,25 @@ function! s:on_move()
 endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
-function! s:fim_on_stdout(pos_x, pos_y, is_auto, job_id, data, event = v:null)
+function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:null)
     if s:ghost_text_nvim
         let l:raw = join(a:data, "\n")
     elseif s:ghost_text_vim
         let l:raw = a:data
+    endif
+
+   " Retrieve the FIM result if cached
+   " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
+    if has_key(g:result_cache, a:hash)
+        echom "Cache Hit: " . a:hash
+        let l:raw = get(g:result_cache, a:hash)
+    else
+        if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
+            let l:keys = keys(g:result_cache)
+            let l:hash = l:keys[rand() % len(l:keys)]
+            call remove(g:result_cache, l:hash)
+        endif
+        let g:result_cache[a:hash] = l:raw
     endif
 
     if a:pos_x != col('.') - 1 || a:pos_y != line('.')
