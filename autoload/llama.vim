@@ -561,7 +561,6 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
    " Retrieve the FIM result if cached
    " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
     if has_key(g:result_cache, a:hash)
-        echom "Cache Hit: " . a:hash
         let l:raw = get(g:result_cache, a:hash)
     else
         if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
