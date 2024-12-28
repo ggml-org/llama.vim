@@ -447,7 +447,7 @@ function! llama#fim(is_auto) abort
     let l:request_context = l:prefix . "|" . l:suffix . "|" . l:prompt
     let l:hash = sha256(l:request_context) 
 
-   " Check if the completion is cached 
+    " Check if the completion is cached
     let l:cached_completion = get(g:result_cache, l:hash , v:null)
 
     if l:cached_completion != v:null
@@ -558,8 +558,8 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
         let l:raw = a:data
     endif
 
-   " Retrieve the FIM result if cached
-   " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
+    " Retrieve the FIM result from cache
+    " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
     if has_key(g:result_cache, a:hash)
         let l:raw = get(g:result_cache, a:hash)
     else
