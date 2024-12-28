@@ -53,6 +53,8 @@ let s:default_config = {
 
 let g:llama_config = get(g:, 'llama_config', s:default_config)
 
+let g:result_cache = {}
+
 function! s:get_indent(str)
     let l:count = 0
     for i in range(len(a:str))
