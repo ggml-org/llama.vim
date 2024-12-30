@@ -554,17 +554,17 @@ endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
 function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:null)
-    if s:ghost_text_nvim
-        let l:raw = join(a:data, "\n")
-    elseif s:ghost_text_vim
-        let l:raw = a:data
-    endif
-
     " Retrieve the FIM result from cache
     " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
     if has_key(g:result_cache, a:hash)
         let l:raw = get(g:result_cache, a:hash)
     else
+        if s:ghost_text_nvim
+            let l:raw = join(a:data, "\n")
+        elseif s:ghost_text_vim
+            let l:raw = a:data
+        endif
+
         if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
             let l:keys = keys(g:result_cache)
             let l:hash = l:keys[rand() % len(l:keys)]
