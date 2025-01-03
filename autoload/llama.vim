@@ -361,6 +361,7 @@ function! llama#fim(is_auto) abort
     endif
 
     let s:t_fim_start = reltime()
+
     let s:content = []
     let s:can_accept = v:false
 
@@ -450,7 +451,6 @@ function! llama#fim(is_auto) abort
 
     " Check if the completion is cached
     let l:cached_completion = get(g:result_cache, l:hash , v:null)
-
 
     " ... or if there is a cached completion nearby (10 characters behind)
     " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
@@ -578,6 +578,7 @@ function! s:on_move()
     call llama#fim_cancel()
 endfunction
 
+" TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
 function! s:insert_cache(key, value)
     if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
         let l:keys = keys(g:result_cache)
@@ -590,7 +591,6 @@ endfunction
 " callback that processes the FIM result from the server and displays the suggestion
 function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:null)
     " Retrieve the FIM result from cache
-    " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
     if has_key(g:result_cache, a:hash)
         let l:raw = get(g:result_cache, a:hash)
     else
@@ -635,7 +635,6 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
     let l:n_predict    = 0
     let l:t_predict_ms = 1.0
     let l:s_predict    = 0
-
 
     " get the generated suggestion
     if s:can_accept
@@ -738,7 +737,6 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
     let s:pos_dx = len(s:content[-1])
 
     let s:content[-1] .= s:line_cur_suffix
-
 
     call llama#fim_cancel()
 
