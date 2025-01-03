@@ -361,7 +361,6 @@ function! llama#fim(is_auto) abort
     endif
 
     let s:t_fim_start = reltime()
-
     let s:content = []
     let s:can_accept = v:false
 
@@ -445,14 +444,41 @@ function! llama#fim(is_auto) abort
     endif
     let s:job_error = 0
 
-    " Construct hash from prefix, suffix, and prompt
-    let l:request_context = l:prefix . "|" . l:suffix . "|" . l:prompt
+    " Construct hash from prefix, prompt, and suffix
+    let l:request_context = l:prefix . l:prompt . l:suffix
     let l:hash = sha256(l:request_context) 
 
     " Check if the completion is cached
     let l:cached_completion = get(g:result_cache, l:hash , v:null)
 
+
+    " ... or if there is a cached completion nearby (10 characters behind)
+    " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
+    " then it checks that the characters typed after (x,y) match up with the cached completion result.
+    if l:cached_completion == v:null
+        let l:past_text = l:prefix . l:prompt
+        for i in range(10)
+                let l:hash_txt = l:past_text[:-(2+i)] . l:suffix
+                let l:temp_hash = sha256(l:hash_txt)
+                if has_key(g:result_cache, l:temp_hash)
+                    let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
+                    if  l:temp_cached_completion == ""
+                        break
+                    endif
+                    let l:response = json_decode(l:temp_cached_completion)
+                    if l:response['content'][0:len(l:past_text[-(1+i):])-1] !=# l:past_text[-(1+i):]
+                        break
+                    endif
+                    let l:response['content']  = l:response['content'][i+1:]
+                    let g:result_cache[l:hash] = json_encode(l:response)
+                    let l:cached_completion = g:result_cache[l:hash]
+                    break
+                endif
+        endfor
+    endif
+    
     if l:cached_completion != v:null
+
         call s:fim_on_stdout(l:hash, s:pos_x, s:pos_y, a:is_auto, 0, l:cached_completion)
     else
         " send the request asynchronously
@@ -552,6 +578,15 @@ function! s:on_move()
     call llama#fim_cancel()
 endfunction
 
+function! s:insert_cache(key, value)
+    if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
+        let l:keys = keys(g:result_cache)
+        let l:hash = l:keys[rand() % len(l:keys)]
+        call remove(g:result_cache, l:hash)
+    endif
+    let g:result_cache[a:key] = a:value
+endfunction
+
 " callback that processes the FIM result from the server and displays the suggestion
 function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:null)
     " Retrieve the FIM result from cache
@@ -564,13 +599,7 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
         elseif s:ghost_text_vim
             let l:raw = a:data
         endif
-
-        if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
-            let l:keys = keys(g:result_cache)
-            let l:hash = l:keys[rand() % len(l:keys)]
-            call remove(g:result_cache, l:hash)
-        endif
-        let g:result_cache[a:hash] = l:raw
+        call s:insert_cache(a:hash, l:raw)
     endif
 
     if a:pos_x != col('.') - 1 || a:pos_y != line('.')
@@ -606,6 +635,7 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
     let l:n_predict    = 0
     let l:t_predict_ms = 1.0
     let l:s_predict    = 0
+
 
     " get the generated suggestion
     if s:can_accept
@@ -708,6 +738,7 @@ function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:n
     let s:pos_dx = len(s:content[-1])
 
     let s:content[-1] .= s:line_cur_suffix
+
 
     call llama#fim_cancel()
 
