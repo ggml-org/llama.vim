@@ -478,7 +478,6 @@ function! llama#fim(is_auto) abort
     endif
     
     if l:cached_completion != v:null
-
         call s:fim_on_stdout(l:hash, s:pos_x, s:pos_y, a:is_auto, 0, l:cached_completion)
     else
         " send the request asynchronously
