@@ -124,7 +124,7 @@ function! llama#init()
 
     augroup llama
         autocmd!
-        autocmd InsertEnter     * inoremap <expr> <silent> <C-F> llama#fim_inline(v:false)
+        autocmd InsertEnter     * inoremap <expr> <silent> <C-F> llama#fim_inline(v:false, v:false)
         autocmd InsertLeavePre  * call llama#fim_cancel()
 
         autocmd CursorMoved     * call s:on_move()
@@ -132,7 +132,7 @@ function! llama#init()
         autocmd CompleteChanged * call llama#fim_cancel()
 
         if g:llama_config.auto_fim
-            autocmd CursorMovedI * call llama#fim(v:true)
+            autocmd CursorMovedI * call llama#fim(v:true, v:true)
         endif
 
         " gather chunks upon yanking
@@ -332,14 +332,14 @@ function! s:ring_update()
 endfunction
 
 " necessary for 'inoremap <expr>'
-function! llama#fim_inline(is_auto) abort
-    call llama#fim(a:is_auto)
+function! llama#fim_inline(is_auto, cache) abort
+    call llama#fim(a:is_auto, a:cache)
     return ''
 endfunction
 
 " the main FIM call
 " takes local context around the cursor and sends it together with the extra context to the server for completion
-function! llama#fim(is_auto) abort
+function! llama#fim(is_auto, cache) abort
     " we already have a suggestion for the current cursor position
     if s:hint_shown && !a:is_auto
         call llama#fim_cancel()
@@ -356,7 +356,7 @@ function! llama#fim(is_auto) abort
         endif
 
         let s:t_fim_start = reltime()
-        let s:timer_fim = timer_start(600, {-> llama#fim(v:true)})
+        let s:timer_fim = timer_start(600, {-> llama#fim(v:true, a:cache)})
         return
     endif
 
@@ -447,49 +447,51 @@ function! llama#fim(is_auto) abort
 
     " Construct hash from prefix, prompt, and suffix
     let l:request_context = l:prefix . l:prompt . l:suffix
-    let l:hash = sha256(l:request_context) 
+    let l:hash = sha256(l:request_context)
 
-    " Check if the completion is cached
-    let l:cached_completion = get(g:result_cache, l:hash , v:null)
+    if a:cache
+        " Check if the completion is cached
+        let l:cached_completion = get(g:result_cache, l:hash , v:null)
 
-    " ... or if there is a cached completion nearby (10 characters behind)
-    " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
-    " then it checks that the characters typed after (x,y) match up with the cached completion result.
-    if l:cached_completion == v:null
-        let l:past_text = l:prefix . l:prompt
-        for i in range(10)
-                let l:hash_txt = l:past_text[:-(2+i)] . l:suffix
-                let l:temp_hash = sha256(l:hash_txt)
-                if has_key(g:result_cache, l:temp_hash)
-                    let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
-                    if  l:temp_cached_completion == ""
+        " ... or if there is a cached completion nearby (10 characters behind)
+        " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
+        " then it checks that the characters typed after (x,y) match up with the cached completion result.
+        if l:cached_completion == v:null
+            let l:past_text = l:prefix . l:prompt
+            for i in range(10)
+                    let l:hash_txt = l:past_text[:-(2+i)] . l:suffix
+                    let l:temp_hash = sha256(l:hash_txt)
+                    if has_key(g:result_cache, l:temp_hash)
+                        let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
+                        if  l:temp_cached_completion == ""
+                            break
+                        endif
+                        let l:response = json_decode(l:temp_cached_completion)
+                        if l:response['content'][0:len(l:past_text[-(1+i):])-1] !=# l:past_text[-(1+i):]
+                            break
+                        endif
+                        let l:response['content']  = l:response['content'][i+1:]
+                        let g:result_cache[l:hash] = json_encode(l:response)
+                        let l:cached_completion = g:result_cache[l:hash]
                         break
                     endif
-                    let l:response = json_decode(l:temp_cached_completion)
-                    if l:response['content'][0:len(l:past_text[-(1+i):])-1] !=# l:past_text[-(1+i):]
-                        break
-                    endif
-                    let l:response['content']  = l:response['content'][i+1:]
-                    let g:result_cache[l:hash] = json_encode(l:response)
-                    let l:cached_completion = g:result_cache[l:hash]
-                    break
-                endif
-        endfor
+            endfor
+        endif
     endif
-    
-    if l:cached_completion != v:null
-        call s:fim_on_stdout(l:hash, s:pos_x, s:pos_y, a:is_auto, 0, l:cached_completion)
+
+    if a:cache && l:cached_completion != v:null
+        call s:fim_on_stdout(l:hash, a:cache, s:pos_x, s:pos_y, a:is_auto, 0, l:cached_completion)
     else
         " send the request asynchronously
         if s:ghost_text_nvim
             let s:current_job = jobstart(l:curl_command, {
-                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, s:pos_x, s:pos_y, a:is_auto]),
+                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, a:cache, s:pos_x, s:pos_y, a:is_auto]),
                 \ 'on_exit':   function('s:fim_on_exit'),
                 \ 'stdout_buffered': v:true
                 \ })
         elseif s:ghost_text_vim
             let s:current_job = job_start(l:curl_command, {
-                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, s:pos_x, s:pos_y, a:is_auto]),
+                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, a:cache, s:pos_x, s:pos_y, a:is_auto]),
                 \ 'exit_cb':   function('s:fim_on_exit')
                 \ })
         endif
@@ -588,11 +590,13 @@ function! s:insert_cache(key, value)
 endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
-function! s:fim_on_stdout(hash, pos_x, pos_y, is_auto, job_id, data, event = v:null)
+function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, event = v:null)
     " Retrieve the FIM result from cache
-    if has_key(g:result_cache, a:hash)
+    if a:cache && has_key(g:result_cache, a:hash)
+        echom "cache hit"
         let l:raw = get(g:result_cache, a:hash)
     else
+        echom "cache miss"
         if s:ghost_text_nvim
             let l:raw = join(a:data, "\n")
         elseif s:ghost_text_vim
