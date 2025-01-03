@@ -349,14 +349,14 @@ function! llama#fim(is_auto, cache) abort
     call llama#fim_cancel()
 
     " avoid sending repeated requests too fast
-    if reltimefloat(reltime(s:t_fim_start)) < 0.6
+    if s:current_job != v:null
         if s:timer_fim != -1
             call timer_stop(s:timer_fim)
             let s:timer_fim = -1
         endif
 
         let s:t_fim_start = reltime()
-        let s:timer_fim = timer_start(600, {-> llama#fim(v:true, a:cache)})
+        let s:timer_fim = timer_start(100, {-> llama#fim(v:true, a:cache)})
         return
     endif
 
@@ -459,22 +459,22 @@ function! llama#fim(is_auto, cache) abort
         if l:cached_completion == v:null
             let l:past_text = l:prefix . l:prompt
             for i in range(10)
-                    let l:hash_txt = l:past_text[:-(2+i)] . l:suffix
-                    let l:temp_hash = sha256(l:hash_txt)
-                    if has_key(g:result_cache, l:temp_hash)
-                        let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
-                        if  l:temp_cached_completion == ""
-                            break
-                        endif
-                        let l:response = json_decode(l:temp_cached_completion)
-                        if l:response['content'][0:len(l:past_text[-(1+i):])-1] !=# l:past_text[-(1+i):]
-                            break
-                        endif
-                        let l:response['content']  = l:response['content'][i+1:]
-                        let g:result_cache[l:hash] = json_encode(l:response)
-                        let l:cached_completion = g:result_cache[l:hash]
+                let l:hash_txt = l:past_text[:-(2+i)] . l:suffix
+                let l:temp_hash = sha256(l:hash_txt)
+                if has_key(g:result_cache, l:temp_hash)
+                    let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
+                    if  l:temp_cached_completion == ""
                         break
                     endif
+                    let l:response = json_decode(l:temp_cached_completion)
+                    if l:response['content'][0:len(l:past_text[-(1+i):])-1] !=# l:past_text[-(1+i):]
+                        break
+                    endif
+                    let l:response['content']  = l:response['content'][i+1:]
+                    let g:result_cache[l:hash] = json_encode(l:response)
+                    let l:cached_completion = g:result_cache[l:hash]
+                    break
+                endif
             endfor
         endif
     endif
