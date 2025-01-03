@@ -349,14 +349,14 @@ function! llama#fim(is_auto) abort
     call llama#fim_cancel()
 
     " avoid sending repeated requests too fast
-    if reltimefloat(reltime(s:t_fim_start)) < 0.6
+    if s:current_job != v:null
         if s:timer_fim != -1
             call timer_stop(s:timer_fim)
             let s:timer_fim = -1
         endif
 
         let s:t_fim_start = reltime()
-        let s:timer_fim = timer_start(600, {-> llama#fim(v:true)})
+        let s:timer_fim = timer_start(100, {-> llama#fim(v:true)})
         return
     endif
 
@@ -447,7 +447,7 @@ function! llama#fim(is_auto) abort
 
     " Construct hash from prefix, suffix, and prompt
     let l:request_context = l:prefix . "|" . l:suffix . "|" . l:prompt
-    let l:hash = sha256(l:request_context) 
+    let l:hash = sha256(l:request_context)
 
     " Check if the completion is cached
     let l:cached_completion = get(g:result_cache, l:hash , v:null)
