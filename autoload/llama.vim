@@ -593,10 +593,8 @@ endfunction
 function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, event = v:null)
     " Retrieve the FIM result from cache
     if a:cache && has_key(g:result_cache, a:hash)
-        echom "cache hit"
         let l:raw = get(g:result_cache, a:hash)
     else
-        echom "cache miss"
         if s:ghost_text_nvim
             let l:raw = join(a:data, "\n")
         elseif s:ghost_text_vim
