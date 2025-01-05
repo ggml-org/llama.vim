@@ -594,6 +594,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     " Retrieve the FIM result from cache
     if a:cache && has_key(g:result_cache, a:hash)
         let l:raw = get(g:result_cache, a:hash)
+        let l:is_cached = v:true
     else
         if s:ghost_text_nvim
             let l:raw = join(a:data, "\n")
@@ -601,6 +602,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
             let l:raw = a:data
         endif
         call s:insert_cache(a:hash, l:raw)
+        let l:is_cached = v:false
     endif
 
     if a:pos_x != col('.') - 1 || a:pos_y != line('.')
@@ -758,6 +760,12 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
             let l:info = printf("%s | WARNING: the context is full: %d / %d, increase the server context size or reduce g:llama_config.ring_n_chunks",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
                 \ l:n_cached, l:n_ctx
+                \ )
+        elseif l:is_cached
+            let l:info = printf("%s | C: %d / %d, | t: %.2f ms",
+                \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
+                \ len(keys(g:result_cache)), g:llama_config.max_cache_keys,
+                \ 1000.0 * reltimefloat(reltime(s:t_fim_start))
                 \ )
         else
             let l:info = printf("%s | c: %d / %d, r: %d / %d, e: %d, q: %d / 16 | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s) | t: %.2f ms",
