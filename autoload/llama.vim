@@ -586,11 +586,23 @@ function! s:insert_cache(key, value)
         let l:hash = l:keys[rand() % len(l:keys)]
         call remove(g:result_cache, l:hash)
     endif
-    let g:result_cache[a:key] = a:value
+    " put just the raw content in the cache
+    let l:parsed_value = json_decode(a:value)
+    let l:stripped_content = get(l:parsed_value, 'content', '')
+    let g:result_cache[a:key] = json_encode({'content': l:stripped_content})
 endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
 function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, event = v:null)
+    if a:pos_x != col('.') - 1 || a:pos_y != line('.')
+        return
+    endif
+
+    " show the suggestion only in insert mode
+    if mode() !=# 'i'
+        return
+    endif
+
     " Retrieve the FIM result from cache
     if a:cache && has_key(g:result_cache, a:hash)
         let l:raw = get(g:result_cache, a:hash)
@@ -603,15 +615,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         endif
         call s:insert_cache(a:hash, l:raw)
         let l:is_cached = v:false
-    endif
-
-    if a:pos_x != col('.') - 1 || a:pos_y != line('.')
-        return
-    endif
-
-    " show the suggestion only in insert mode
-    if mode() !=# 'i'
-        return
     endif
 
     " TODO: this does not seem to work as expected, so disabling for now
@@ -642,7 +645,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     " get the generated suggestion
     if s:can_accept
         let l:response = json_decode(l:raw)
-
         for l:part in split(get(l:response, 'content', ''), "\n", 1)
             call add(s:content, l:part)
         endfor
@@ -670,6 +672,10 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
             let l:n_predict    = get(l:timings, 'predicted_n', 0)
             let l:t_predict_ms = get(l:timings, 'predicted_ms', 1)
             let l:s_predict    = get(l:timings, 'predicted_per_second', 0)
+        endif
+
+        if l:is_cached
+            let l:has_info = v:true
         endif
     endif
 
@@ -751,8 +757,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     let l:info = ''
-
     " construct the info message
+    echom l:has_info
+
     if g:llama_config.show_info > 0 && l:has_info
         let l:prefix = '   '
 
