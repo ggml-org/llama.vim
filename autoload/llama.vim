@@ -614,7 +614,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         elseif s:ghost_text_vim
             let l:raw = a:data
         endif
-        call s:insert_cache(a:hash, l:raw)
         let l:is_cached = v:false
     endif
 
@@ -627,6 +626,10 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
 
     if len(l:raw) == 0
         return
+    endif
+
+    if !l:is_cached
+        call s:insert_cache(a:hash, l:raw)
     endif
 
     let s:pos_x = a:pos_x
