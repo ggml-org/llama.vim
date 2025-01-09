@@ -594,18 +594,8 @@ endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
 function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, event = v:null)
-    " make sure cursor position hasn't changed since fim_on_stdout was triggered
-    if a:pos_x != col('.') - 1 || a:pos_y != line('.')
-        return
-    endif
-
-    " show the suggestion only in insert mode
-    if mode() !=# 'i'
-        return
-    endif
-
-    " Retrieve the FIM result from cache
     if a:cache && has_key(g:result_cache, a:hash)
+        " retrieve the FIM result from cache
         let l:raw = get(g:result_cache, a:hash)
         let l:is_cached = v:true
     else
@@ -617,20 +607,32 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:is_cached = v:false
     endif
 
+    " ignore empty results
+    if len(l:raw) == 0
+        return
+    endif
+
+    " save the FIM result to the cache
+    if !l:is_cached
+        call s:insert_cache(a:hash, l:raw)
+    endif
+
+    " make sure cursor position hasn't changed since fim_on_stdout was triggered
+    if a:pos_x != col('.') - 1 || a:pos_y != line('.')
+        return
+    endif
+
+    " show the suggestion only in insert mode
+    if mode() !=# 'i'
+        return
+    endif
+
     " TODO: this does not seem to work as expected, so disabling for now
     "if s:job_error || len(l:raw) == 0
     "    let l:raw = json_encode({'content': '  llama.vim : cannot reach llama.cpp server. (:help llama)'})
 
     "    let s:can_accept = v:false
     "endif
-
-    if len(l:raw) == 0
-        return
-    endif
-
-    if !l:is_cached
-        call s:insert_cache(a:hash, l:raw)
-    endif
 
     let s:pos_x = a:pos_x
     let s:pos_y = a:pos_y
