@@ -445,32 +445,33 @@ function! llama#fim(is_auto, cache) abort
     endif
     let s:job_error = 0
 
-    " Construct hash from prefix, prompt, and suffix
-    let l:request_context = l:prefix . l:prompt . l:suffix
+    " Construct hash from prefix, prompt, and suffix with separators
+    let l:request_context = l:prefix . 'Î' . l:prompt . 'Î' . l:suffix
     let l:hash = sha256(l:request_context)
 
     if a:cache
         " Check if the completion is cached
-        let l:cached_completion = get(g:result_cache, l:hash , v:null)
+        let l:cached_completion = get(g:result_cache, l:hash, v:null)
 
         " ... or if there is a cached completion nearby (10 characters behind)
         " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
         " then it checks that the characters typed after (x,y) match up with the cached completion result.
         if l:cached_completion == v:null
-            let l:past_text = l:prefix . l:prompt
+            let l:past_text = l:prefix . 'Î' . l:prompt
             for i in range(10)
-                let l:hash_txt = l:past_text[:-(2+i)] . l:suffix
+                let l:removed_section = l:past_text[-(1 + i):]
+                let l:hash_txt = l:past_text[:-(2 + i)] . 'Î' . l:suffix
                 let l:temp_hash = sha256(l:hash_txt)
                 if has_key(g:result_cache, l:temp_hash)
                     let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
-                    if  l:temp_cached_completion == ""
+                    if l:temp_cached_completion == ""
                         break
                     endif
                     let l:response = json_decode(l:temp_cached_completion)
-                    if l:response['content'][0:len(l:past_text[-(1+i):])-1] !=# l:past_text[-(1+i):]
+                    if l:response['content'][0:i] !=# l:removed_section
                         break
                     endif
-                    let l:response['content']  = l:response['content'][i+1:]
+                    let l:response['content'] = l:response['content'][i + 1:]
                     let g:result_cache[l:hash] = json_encode(l:response)
                     let l:cached_completion = g:result_cache[l:hash]
                     break
