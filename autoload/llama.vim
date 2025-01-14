@@ -307,7 +307,7 @@ function! s:ring_update()
         \ 'samplers':         ["temperature"],
         \ 'cache_prompt':     v:true,
         \ 't_max_prompt_ms':  1,
-        \ 't_max_predict_ms': 1
+        \ 't_max_predict_ms': 1,
         \ 'response_fields':  [""]
         \ })
     let l:curl_command = [
