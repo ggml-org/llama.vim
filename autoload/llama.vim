@@ -307,7 +307,7 @@ function! s:ring_update()
         \ 'samplers':         ["temperature"],
         \ 'cache_prompt':     v:true,
         \ 't_max_prompt_ms':  1,
-        \ 't_max_predict_ms': 1
+        \ 't_max_predict_ms': 1,
         \ 'response_fields':  [""]
         \ })
     let l:curl_command = [
@@ -433,7 +433,6 @@ function! llama#fim(is_auto, cache) abort
         \                       "timings/predicted_per_second",
         \                       "truncated",
         \                       "tokens_cached",
-        \                       "generation_settings/n_ctx",
         \                     ],
         \ })
 
@@ -676,7 +675,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
             call remove(s:content, -1)
         endwhile
 
-        let l:n_ctx = get(l:response, 'generation_settings/n_ctx', 0)
         let l:n_cached  = get(l:response, 'timings/tokens_cached', 0)
         let l:truncated = get(l:response, 'timings/truncated', v:false)
 
@@ -784,9 +782,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:prefix = '   '
 
         if l:truncated
-            let l:info = printf("%s | WARNING: the context is full: %d / %d, increase the server context size or reduce g:llama_config.ring_n_chunks",
+            let l:info = printf("%s | WARNING: the context is full: %d, increase the server context size or reduce g:llama_config.ring_n_chunks",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
-                \ l:n_cached, l:n_ctx
+                \ l:n_cached
                 \ )
         elseif l:is_cached
             let l:info = printf("%s | C: %d / %d, | t: %.2f ms",
@@ -795,9 +793,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
                 \ 1000.0 * reltimefloat(reltime(s:t_fim_start))
                 \ )
         else
-            let l:info = printf("%s | c: %d / %d, r: %d / %d, e: %d, q: %d / 16 | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s) | t: %.2f ms",
+            let l:info = printf("%s | c: %d, r: %d / %d, e: %d, q: %d / 16 | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s) | t: %.2f ms",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
-                \ l:n_cached,  l:n_ctx, len(s:ring_chunks), g:llama_config.ring_n_chunks, s:ring_n_evict, len(s:ring_queued),
+                \ l:n_cached,  len(s:ring_chunks), g:llama_config.ring_n_chunks, s:ring_n_evict, len(s:ring_queued),
                 \ l:n_prompt,  l:t_prompt_ms,  l:s_prompt,
                 \ l:n_predict, l:t_predict_ms, l:s_predict,
                 \ 1000.0 * reltimefloat(reltime(s:t_fim_start))
