@@ -663,8 +663,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     let l:t_predict_ms = 1.0
     let l:s_predict    = 0
 
-    echom "Resopnse: " . l:raw
-
     " get the generated suggestion
     if s:can_accept
         let l:response = json_decode(l:raw)
@@ -682,6 +680,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:n_cached  = get(l:response, 'timings/tokens_cached', 0)
         let l:truncated = get(l:response, 'timings/truncated', v:false)
 
+        " if response.timings is available
         if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
             \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
             let l:has_info = v:true
