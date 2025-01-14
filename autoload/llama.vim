@@ -420,7 +420,21 @@ function! llama#fim(is_auto, cache) abort
         \ 'samplers':         ["top_k", "top_p", "infill"],
         \ 'cache_prompt':     v:true,
         \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
-        \ 't_max_predict_ms': g:llama_config.t_max_predict_ms
+        \ 't_max_predict_ms': g:llama_config.t_max_predict_ms,
+        \ 'response_fields':  [ 
+        \                       "content",
+        \                       "timings/prompt_n", 
+        \                       "timings/prompt_ms", 
+        \                       "timings/prompt_per_token_ms",
+        \                       "timings/prompt_per_second",
+        \                       "timings/predicted_n", 
+        \                       "timings/predicted_ms", 
+        \                       "timings/predicted_per_token_ms",
+        \                       "timings/predicted_per_second",
+        \                       "truncated",
+        \                       "tokens_cached",
+        \                       "generation_settings/n_ctx",
+        \                     ],
         \ })
 
     let l:curl_command = [
@@ -649,6 +663,8 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     let l:t_predict_ms = 1.0
     let l:s_predict    = 0
 
+    echom "Resopnse: " . l:raw
+
     " get the generated suggestion
     if s:can_accept
         let l:response = json_decode(l:raw)
@@ -662,24 +678,21 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
             call remove(s:content, -1)
         endwhile
 
-        let l:generation_settings = get(l:response, 'generation_settings', {})
-        let l:n_ctx = get(l:generation_settings, 'n_ctx', 0)
+        let l:n_ctx = get(l:response, 'generation_settings/n_ctx', 0)
+        let l:n_cached  = get(l:response, 'timings/tokens_cached', 0)
+        let l:truncated = get(l:response, 'timings/truncated', v:false)
 
-        let l:n_cached  = get(l:response, 'tokens_cached', 0)
-        let l:truncated = get(l:response, 'truncated', v:false)
-
-        " if response.timings is available
-        if len(get(l:response, 'timings', {})) > 0
+        if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
+            \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
             let l:has_info = v:true
-            let l:timings  = get(l:response, 'timings', {})
 
-            let l:n_prompt    = get(l:timings, 'prompt_n', 0)
-            let l:t_prompt_ms = get(l:timings, 'prompt_ms', 1)
-            let l:s_prompt    = get(l:timings, 'prompt_per_second', 0)
+            let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
+            let l:t_prompt_ms = get(l:response, 'timings/prompt_ms', 1)
+            let l:s_prompt    = get(l:response, 'timings/prompt_per_second', 0)
 
-            let l:n_predict    = get(l:timings, 'predicted_n', 0)
-            let l:t_predict_ms = get(l:timings, 'predicted_ms', 1)
-            let l:s_predict    = get(l:timings, 'predicted_per_second', 0)
+            let l:n_predict    = get(l:response, 'timings/predicted_n', 0)
+            let l:t_predict_ms = get(l:response, 'timings/predicted_ms', 1)
+            let l:s_predict    = get(l:response, 'timings/predicted_per_second', 0)
         endif
 
         " if response was pulled from cache
