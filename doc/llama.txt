@@ -1,7 +1,9 @@
 llama.vim                                                                *llama*
-================================================================================
 
 LLM-based text completion using llama.cpp
+
+================================================================================
+Requirement
 
 Requires:
 
@@ -10,45 +12,166 @@ Requires:
 - llama.cpp server instance
 - FIM-compatible model
 
-Sample config:
+
+================================================================================
+Shortcut
 
 - Tab       - accept the current suggestion
 - Shift+Tab - accept just the first line of the suggestion
 - Ctrl+B    - accept just the first word of the suggestion
 - Ctrl+F    - toggle FIM completion manually
 
+================================================================================
+How to start the server
+
 Start the llama.cpp server with a FIM-compatible model. For example:
 
-$ llama-server \
-        -m {model.gguf} --port 8012 -ngl 99 -fa -dt 0.1 \
-        --ubatch-size 512 --batch-size 1024 \
-        --ctx-size 0 --cache-reuse 256
-
---batch-size [512, model max context]
+>sh
+		$ llama-server \
+				-m {model.gguf} --port 8012 -ngl 99 -fa -dt 0.1 \
+				--ubatch-size 512 --batch-size 1024 \
+				--ctx-size 0 --cache-reuse 256
+<
+`--batch-size` [512, model max context]
 
 Adjust the batch size to control how much of the provided local context will
 be used during the inference lower values will use smaller part of the context
 around the cursor, which will result in faster processing.
 
---ubatch-size [64, 2048]
+`--ubatch-size` [64, 2048]
 
 Chunks the batch into smaller chunks for faster processing depends on the
 specific hardware. Use llama-bench to profile and determine the best size.
 
---ctx-size [1024, model max context], 0 - use model max context
+`--ctx-size` [1024, model max context], 0 - use model max context
 
 The maximum amount of context that the server will use. Ideally, this should
 be the same as the model's max context size, but if your device does not have
 enough memory to handle the full context, you can try to reduce this value.
 
---cache-reuse (ge:llama_config.n_predict, 1024]
+`--cache-reuse` (ge:llama_config.n_predict, 1024]
 
 This should be either 0 (disabled) or strictly larger than
 g:llama_config.n_predict using non-zero value enables context reuse on the
 server side which dramatically improves the performance at large contexts. A
 value of 256 should be good for all cases.
 
-More info:
+================================================================================
+Configuration													*llama_config*
+
+To customize the behaviour of `llama.vim`, you can set/modify the `g:llama_config`
+variable.
+
+Currently the default config is:
+>vim
+		let s:default_config = {
+			\ 'endpoint':         'http://127.0.0.1:8012/infill',
+			\ 'api_key':          '',
+			\ 'n_prefix':         256,
+			\ 'n_suffix':         64,
+			\ 'n_predict':        128,
+			\ 't_max_prompt_ms':  500,
+			\ 't_max_predict_ms': 500,
+			\ 'show_info':        2,
+			\ 'auto_fim':         v:true,
+			\ 'max_line_suffix':  8,
+			\ 'max_cache_keys':   250,
+			\ 'ring_n_chunks':    16,
+			\ 'ring_chunk_size':  64,
+			\ 'ring_scope':       1024,
+			\ 'ring_update_ms':   1000,
+			\ }
+<
+
+- {endpoint}			llama.cpp server endpoint
+
+- {api_key}				llama.cpp server api key (optional)
+
+- {n_prefix}			number of lines before the cursor location to include
+						in the local prefix
+
+- {n_suffix}			number of lines after  the cursor location to include
+						in the local suffix
+
+- {n_predict}			max number of tokens to predict
+
+- {t_max_prompt_ms}		max alloted time for the prompt processing
+						(TODO: not yet supported)
+
+- {t_max_predict_ms}	max alloted time for the prediction
+
+- {show_info}			show extra info about the inference
+						(0 - disabled, 1 - statusline, 2 - inline)
+
+- {auto_fim}			trigger FIM completion automatically on cursor movement
+
+- {max_line_suffix}		do not auto-trigger FIM completion if there are
+						more than this number of characters to the right
+						of the cursor
+
+- {max_cache_keys}		max number of cached completions to keep in result_cache
+
+
+parameters for the ring-buffer with extra context:
+
+- {ring_n_chunks}		max number of chunks to pass as extra context to the
+						server (0 to disable)
+
+- {ring_chunk_size}		max size of the chunks (in number of lines)
+						Note: Adjust these numbers so that you don't overrun
+						your context. At `ring_n_chunks = 64` and
+						`ring_chunk_size = 64` you need ~32k context
+
+- {ring_scope}			the range around the cursor position (in number of
+						lines) for gathering chunks after FIM
+
+- {ring_update_ms}		how often to process queued chunks in normal mode
+
+Example:
+
+1. Disable the inline info (vimscript):
+>vim
+		" put before llama.vim loads
+		let g:llama_config = { 'show_info': 0 }
+
+2. Same but setting the specific variable directly
+>vim
+		let g:llama_config.show_info = v:false
+<
+
+3. Disable auto FIM completion, etc (lazy.nvim, lua):
+>lua
+    {
+        'ggml-org/llama.vim',
+        init = function()
+            vim.g.llama_config = {
+                n_prefix = 1024,
+                n_suffix= 1024,
+                auto_fim = false,
+            }
+        end,
+    }
+<
+
+To adjust the colors for hint and info texts, `llama.vim` provides the
+highlight group `llama_hl_hint` and `llama_hl_info`. You can modify these
+groups using the normal way.
+
+Example:
+
+vimscript:
+>vim
+		highlight llama_hl_hint guifg=#f8732e ctermfg=209
+		highlight llama_hl_info guifg=#50fa7b ctermfg=119
+<
+lua:
+>lua
+		vim.api.nvim_set_hl(0, "llama_hl_hint", {fg = "#f8732e", ctermfg=209})
+		vim.api.nvim_set_hl(0, "llama_hl_info", {fg = "#50fa7b", ctermfg=119})
+<
+
+================================================================================
+More Info
 
   - https://github.com/ggml-org/llama.vim
   - https://github.com/ggerganov/llama.cpp/pull/9787

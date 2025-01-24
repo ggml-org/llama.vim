@@ -39,6 +39,46 @@ git clone https://github.com/ggml-org/llama.vim
 
 Then add `Plugin 'llama.vim'` to your *.vimrc* in the `vundle#begin()` section.
 
+#### lazy.nvim
+
+```lua
+    {
+        'ggml-org/llama.vim',
+    }
+```
+
+### Plugin configuration
+
+You can customize *llama.vim* by setting the `g:llama_config` variable.
+
+Examples:
+
+1. Disable the inline info:
+```vim
+	" put before llama.vim loads
+	let g:llama_config = { 'show_info': 0 }
+```
+
+2. Same thing but setting directly
+```vim
+	let g:llama_config.show_info = v:false
+```
+
+3. Disable auto FIM completion with lazy.nvim
+```lua
+    {
+        'ggml-org/llama.vim',
+        init = function()
+            vim.g.llama_config = {
+                auto_fim = false,
+            }
+        end,
+    }
+```
+
+Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
+for the full list of options.
+
 ### llama.cpp setup
 
 The plugin requires a [llama.cpp](https://github.com/ggerganov/llama.cpp) server instance to be running at [`g:llama_config.endpoint`](https://github.com/ggml-org/llama.vim/blob/7d3359077adbad4c05872653973c3ceb09f18ad9/autoload/llama.vim#L34-L36)
