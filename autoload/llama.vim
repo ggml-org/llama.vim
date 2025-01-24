@@ -51,7 +51,8 @@ let s:default_config = {
     \ 'ring_update_ms':   1000,
     \ }
 
-let g:llama_config = get(g:, 'llama_config', s:default_config)
+let llama_config = get(g:, 'llama_config', s:default_config)
+let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 
 let g:result_cache = {}
 
