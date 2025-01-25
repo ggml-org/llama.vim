@@ -32,11 +32,11 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "                           at ring_n_chunks = 64 and ring_chunk_size = 64 you need ~32k context
 "   ring_scope:       the range around the cursor position (in number of lines) for gathering chunks after FIM
 "   ring_update_ms:   how often to process queued chunks in normal mode
-" " 256,
+"
 let s:default_config = {
     \ 'endpoint':         'http://127.0.0.1:8012/infill',
     \ 'api_key':          '',
-    \ 'n_prefix':         5, 
+    \ 'n_prefix':         256, 
     \ 'n_suffix':         64,
     \ 'n_predict':        128,
     \ 't_max_prompt_ms':  500,
@@ -463,8 +463,7 @@ function! llama#fim(is_auto, cache) abort
     " Construct hash from prefix, prompt, and suffix with separators
     let l:request_context = l:prefix . 'Î' . l:prompt . 'Î' . l:suffix
     let l:hash = sha256(l:request_context)
-    echom "fim"
-    echom l:request_context
+
     if a:cache
         " Check if the completion is cached
         let l:cached_completion = get(g:result_cache, l:hash, v:null)
@@ -597,16 +596,15 @@ function! s:on_move()
 endfunction
 
 function! llama#speculate()     
-    if len(s:content) == 1 && s:content[0] == ""
+    if s:speculating == v:true || ( len(s:content) == 1 && s:content[0] == "" )
         return
     endif
-
-    " make request
+    
     if  len(s:content) > 0
-        " taking the first line of the sugge stion
-        let l:cur_line =  s:line_cur[:(s:pos_x - 1)] . s:content[0]
         " gather prompt
         if len(s:content) == 1
+            " take the first line of the suggestion if content is only one line
+            let l:cur_line =  s:line_cur[:(s:pos_x - 1)] . s:content[0]
             let l:pos_x_spec = s:pos_x + len(s:content[0] -1)
         else
             let l:cur_line = s:content[-1]
@@ -614,14 +612,14 @@ function! llama#speculate()
         endif
 
         let l:line_cur_prefix_spec =  strpart(l:cur_line, 0, l:pos_x_spec) 
+
         " gather prefix
         let l:pos_y_spec = s:pos_y + len(s:content) - 1
         let l:lines_prefix = getline(max([1, l:pos_y_spec - g:llama_config.n_prefix]), l:pos_y_spec - 2)
         let l:content_cpy = []
 
-        call add(l:content_cpy, s:line_cur[:(s:pos_x - 1)] . s:content[0])
-        call extend(l:content_cpy , s:content[1:])
-        call extend(l:lines_prefix , l:content_cpy)
+        call add(l:lines_prefix , s:line_cur[:(s:pos_x - 1)] . s:content[0])
+        call extend(l:lines_prefix , s:content[1:])
 
         let l:lines_prefix = l:lines_prefix[-(min([len(l:lines_prefix), (g:llama_config.n_prefix + 1)])):-2]
 
@@ -640,11 +638,6 @@ function! llama#speculate()
             \ . "\n"
             \ . join(l:lines_suffix, "\n")
             \ . "\n"
-    
-        " echom "Len: " . len(s:content) . " | Cur: " . getline('.') . "| Spec Prompt: " . l:prompt
-        " echom "line_cur_suffix_spec: " . l:suffix
-        " echom "  " 
-        " echom "  " 
 
         " prepare the extra context data
         let l:extra_context = []
@@ -701,9 +694,8 @@ function! llama#speculate()
         if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
             call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
         endif
-        
-        " speculating is not priority, other jobs take precendence
-        if s:current_job != v:null || s:speculating == v:true
+
+        if s:current_job != v:null
             if s:ghost_text_nvim
                 call jobstop(s:current_job)
             elseif s:ghost_text_vim
@@ -712,12 +704,9 @@ function! llama#speculate()
         endif
 
         let s:speculating = v:true
-
-        echom "specation thinking..."
     
         " Construct hash from prefix, prompt, and suffix with separators
         let l:request_context = l:prefix . 'Î' . l:prompt . 'Î' . l:suffix
-        echom l:request_context
         let l:hash = sha256(l:request_context)
 
         let l:cached_completion = get(g:result_cache, l:hash, v:null)
