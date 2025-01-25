@@ -36,7 +36,7 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 let s:default_config = {
     \ 'endpoint':         'http://127.0.0.1:8012/infill',
     \ 'api_key':          '',
-    \ 'n_prefix':         256, 
+    \ 'n_prefix':         256,
     \ 'n_suffix':         64,
     \ 'n_predict':        128,
     \ 't_max_prompt_ms':  500,
@@ -103,7 +103,7 @@ function! llama#init()
 
     let s:current_job = v:null
     let s:job_error = 0
-    
+
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
     let s:ghost_text_vim = has('textprop')
 
