@@ -73,6 +73,29 @@ function! s:rand(i0, i1) abort
     return a:i0 + rand() % (a:i1 - a:i0 + 1)
 endfunction
 
+let s:llama_enabled = v:true
+
+function! llama#disable()
+    call llama#fim_cancel()
+    autocmd! llama
+    silent! iunmap <C-F>
+endfunction
+
+function! llama#toggle()
+    if s:llama_enabled
+        call llama#disable()
+    else
+        call llama#init()
+    endif
+    let s:llama_enabled = !s:llama_enabled
+endfunction
+
+function llama#setup_commands()
+    command! LlamaEnable call llama#init()
+    command! LlamaDisable call llama#disable()
+    command! LlamaToggle call llama#toggle()
+endfunction
+
 function! llama#init()
     if !executable('curl')
         echohl WarningMsg
@@ -80,6 +103,8 @@ function! llama#init()
         echohl None
         return
     endif
+
+    call llama#setup_commands()
 
     let s:pos_x = 0 " cursor position upon start of completion
     let s:pos_y = 0

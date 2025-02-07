@@ -22,6 +22,25 @@ Shortcut
 - Ctrl+F    - toggle FIM completion manually
 
 ================================================================================
+Commands
+
+*:LlamaDisable*
+
+		Disable the related autocommands and keymap for this vim/nvim session.
+		Equivalent to vimscript function: `llama#disable()`
+
+*:LlamaEnable*
+
+		Enable the related autocommands and keymap for this vim/nvim session
+		Equivalent to vimscript function: `llama#enable()`
+
+*:LlamaToggle*
+
+		Toggle the related autocommands and keymap for this vim/nvim session
+		Equivalent to vimscript function: `llama#toggle()`
+
+
+================================================================================
 How to start the server
 
 Start the llama.cpp server with a FIM-compatible model. For example:
