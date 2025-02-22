@@ -34,22 +34,31 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "   ring_scope:       the range around the cursor position (in number of lines) for gathering chunks after FIM
 "   ring_update_ms:   how often to process queued chunks in normal mode
 "
+" keymaps parameters:
+"
+"   accept_full_keymap: accept full suggestion keymap, default: <Tab>
+"   accept_line_keymap: accept line suggestion keymap, default: <S-Tab>
+"   accept_word_keymap: accept word suggestion keymap, default: <C-B>
+"
 let s:default_config = {
-    \ 'endpoint':         'http://127.0.0.1:8012/infill',
-    \ 'api_key':          '',
-    \ 'n_prefix':         256,
-    \ 'n_suffix':         64,
-    \ 'n_predict':        128,
-    \ 't_max_prompt_ms':  500,
-    \ 't_max_predict_ms': 500,
-    \ 'show_info':        2,
-    \ 'auto_fim':         v:true,
-    \ 'max_line_suffix':  8,
-    \ 'max_cache_keys':   250,
-    \ 'ring_n_chunks':    16,
-    \ 'ring_chunk_size':  64,
-    \ 'ring_scope':       1024,
-    \ 'ring_update_ms':   1000,
+    \ 'endpoint':           'http://127.0.0.1:8012/infill',
+    \ 'api_key':            '',
+    \ 'n_prefix':           256,
+    \ 'n_suffix':           64,
+    \ 'n_predict':          128,
+    \ 't_max_prompt_ms':    500,
+    \ 't_max_predict_ms':   500,
+    \ 'show_info':          2,
+    \ 'auto_fim':           v:true,
+    \ 'max_line_suffix':    8,
+    \ 'max_cache_keys':     250,
+    \ 'ring_n_chunks':      16,
+    \ 'ring_chunk_size':    64,
+    \ 'ring_scope':         1024,
+    \ 'ring_update_ms':     1000,
+    \ 'accept_full_keymap': "<Tab>",
+    \ 'accept_line_keymap': "<S-Tab>",
+    \ 'accept_word_keymap': "<C-B>",
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -885,9 +894,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " setup accept shortcuts
-    inoremap <buffer> <Tab>   <C-O>:call llama#fim_accept('full')<CR>
-    inoremap <buffer> <S-Tab> <C-O>:call llama#fim_accept('line')<CR>
-    inoremap <buffer> <C-B>   <C-O>:call llama#fim_accept('word')<CR>
+    exe 'inoremap <buffer> ' . g:llama_config.accept_full_keymap . ' <C-O>:call llama#fim_accept(''full'')<CR>' 
+    exe 'inoremap <buffer> ' . g:llama_config.accept_line_keymap . ' <C-O>:call llama#fim_accept(''line'')<CR>' 
+    exe 'inoremap <buffer> ' . g:llama_config.accept_word_keymap . ' <C-O>:call llama#fim_accept(''word'')<CR>' 
 
     let s:hint_shown = v:true
 endfunction
