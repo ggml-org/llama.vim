@@ -894,9 +894,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " setup accept shortcuts
-    exe 'inoremap <buffer> ' . g:llama_config.accept_full_keymap . ' <C-O>:call llama#fim_accept(''full'')<CR>' 
-    exe 'inoremap <buffer> ' . g:llama_config.accept_line_keymap . ' <C-O>:call llama#fim_accept(''line'')<CR>' 
-    exe 'inoremap <buffer> ' . g:llama_config.accept_word_keymap . ' <C-O>:call llama#fim_accept(''word'')<CR>' 
+    exe 'inoremap <buffer> ' . g:llama_config.accept_full_keymap . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.accept_line_keymap . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.accept_word_keymap . ' <C-O>:call llama#fim_accept(''word'')<CR>'
 
     let s:hint_shown = v:true
 endfunction

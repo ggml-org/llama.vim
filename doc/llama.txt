@@ -102,7 +102,7 @@ Currently the default config is:
 		    \ 'accept_full_keymap': "<Tab>",
 		    \ 'accept_line_keymap': "<S-Tab>",
 		    \ 'accept_word_keymap': "<C-B>",
-		    \ }	
+		    \ }
 <
 
 - {endpoint}			llama.cpp server endpoint
@@ -170,18 +170,18 @@ Example:
 
 3. Disable auto FIM completion, etc (lazy.nvim, lua):
 >lua
-    {
-        'ggml-org/llama.vim',
-        init = function()
-            vim.g.llama_config = {
-                n_prefix = 1024,
-                n_suffix= 1024,
-                auto_fim = false,
-				accept_full_keymap = "<C-S>",
-            }
-        end,
-    }
-
+		{
+				'ggml-org/llama.vim',
+				init = function()
+						vim.g.llama_config = {
+								n_prefix = 1024,
+								n_suffix= 1024,
+								auto_fim = false,
+								accept_full_keymap = "<C-S>",
+						}
+				end,
+		}
+<
 To adjust the colors for hint and info texts, `llama.vim` provides the
 highlight group `llama_hl_hint` and `llama_hl_info`. You can modify these
 groups using the normal way.
