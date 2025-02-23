@@ -629,9 +629,10 @@ function! llama#fim_cancel()
     endif
 
     " remove the mappings
-    silent! iunmap <buffer> <Tab>
-    silent! iunmap <buffer> <S-Tab>
     silent! iunmap <buffer> <Esc>
+    exe 'inoremap <buffer> ' . g:llama_config.accept_full_keymap
+    exe 'inoremap <buffer> ' . g:llama_config.accept_line_keymap
+    exe 'inoremap <buffer> ' . g:llama_config.accept_word_keymap
 endfunction
 
 function! s:on_move()
