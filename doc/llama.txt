@@ -99,9 +99,9 @@ Currently the default config is:
 		    \ 'ring_chunk_size':    64,
 		    \ 'ring_scope':         1024,
 		    \ 'ring_update_ms':     1000,
-		    \ 'accept_full_keymap': "<Tab>",
-		    \ 'accept_line_keymap': "<S-Tab>",
-		    \ 'accept_word_keymap': "<C-B>",
+		    \ 'keymap_accept_full': "<Tab>",
+		    \ 'keymap_accept_line': "<S-Tab>",
+		    \ 'keymap_accept_word': "<C-B>",
 		    \ }
 <
 
@@ -151,10 +151,10 @@ parameters for the ring-buffer with extra context:
 
 keymaps parameters:
 
-- {accept_full_keymap}	accept full suggestion keymap, default: <Tab>
+- {keymap_accept_full}	accept full suggestion keymap, default: <Tab>
 
-- {accept_line_keymap}	accept line suggestion keymap, default: <S-Tab>
-- {accept_word_keymap}	accept word suggestion keymap, default: <C-B>
+- {keymap_accept_line}	accept line suggestion keymap, default: <S-Tab>
+- {keymap_accept_word}	accept word suggestion keymap, default: <C-B>
 
 Example:
 
@@ -177,7 +177,7 @@ Example:
 								n_prefix = 1024,
 								n_suffix= 1024,
 								auto_fim = false,
-								accept_full_keymap = "<C-S>",
+								keymap_accept_full = "<C-S>",
 						}
 				end,
 		}

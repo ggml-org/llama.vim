@@ -36,9 +36,9 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "
 " keymaps parameters:
 "
-"   accept_full_keymap: accept full suggestion keymap, default: <Tab>
-"   accept_line_keymap: accept line suggestion keymap, default: <S-Tab>
-"   accept_word_keymap: accept word suggestion keymap, default: <C-B>
+"   keymap_accept_full: accept full suggestion keymap, default: <Tab>
+"   keymap_accept_line: accept line suggestion keymap, default: <S-Tab>
+"   keymap_accept_word: accept word suggestion keymap, default: <C-B>
 "
 let s:default_config = {
     \ 'endpoint':           'http://127.0.0.1:8012/infill',
@@ -56,9 +56,9 @@ let s:default_config = {
     \ 'ring_chunk_size':    64,
     \ 'ring_scope':         1024,
     \ 'ring_update_ms':     1000,
-    \ 'accept_full_keymap': "<Tab>",
-    \ 'accept_line_keymap': "<S-Tab>",
-    \ 'accept_word_keymap': "<C-B>",
+    \ 'keymap_accept_full': "<Tab>",
+    \ 'keymap_accept_line': "<S-Tab>",
+    \ 'keymap_accept_word': "<C-B>",
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -629,9 +629,9 @@ function! llama#fim_cancel()
     endif
 
     " remove the mappings
-    exe 'silent! iunmap <buffer> ' . g:llama_config.accept_full_keymap
-    exe 'silent! iunmap <buffer> ' . g:llama_config.accept_line_keymap
-    exe 'silent! iunmap <buffer> ' . g:llama_config.accept_word_keymap
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_full
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_line
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_word
 endfunction
 
 function! s:on_move()
@@ -894,9 +894,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " setup accept shortcuts
-    exe 'inoremap <buffer> ' . g:llama_config.accept_full_keymap . ' <C-O>:call llama#fim_accept(''full'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.accept_line_keymap . ' <C-O>:call llama#fim_accept(''line'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.accept_word_keymap . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
 
     let s:hint_shown = v:true
 endfunction
