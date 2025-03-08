@@ -47,7 +47,7 @@ let s:default_config = {
     \ 'n_suffix':           64,
     \ 'n_predict':          128,
     \ 't_max_prompt_ms':    500,
-    \ 't_max_predict_ms':   500,
+    \ 't_max_predict_ms':   1500,
     \ 'show_info':          2,
     \ 'auto_fim':           v:true,
     \ 'max_line_suffix':    8,
@@ -100,9 +100,9 @@ function! llama#toggle()
 endfunction
 
 function llama#setup_commands()
-    command! LlamaEnable call llama#init()
+    command! LlamaEnable  call llama#init()
     command! LlamaDisable call llama#disable()
-    command! LlamaToggle call llama#toggle()
+    command! LlamaToggle  call llama#toggle()
 endfunction
 
 function! llama#init()
@@ -346,6 +346,7 @@ function! s:ring_update()
         \ 't_max_predict_ms': 1,
         \ 'response_fields':  [""]
         \ })
+
     let l:curl_command = [
         \ "curl",
         \ "--silent",
@@ -355,6 +356,7 @@ function! s:ring_update()
         \ "--header", "Content-Type: application/json",
         \ "--data", "@-",
         \ ]
+
     if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
@@ -410,13 +412,24 @@ function! llama#fim(is_auto, cache) abort
     let s:pos_y = line('.')
     let l:max_y = line('$')
 
-    let l:lines_prefix = getline(max([1, s:pos_y - g:llama_config.n_prefix]), s:pos_y - 1)
-    let l:lines_suffix = getline(s:pos_y + 1, min([l:max_y, s:pos_y + g:llama_config.n_suffix]))
-
     let s:line_cur = getline('.')
 
     let s:line_cur_prefix = strpart(s:line_cur, 0, s:pos_x)
     let s:line_cur_suffix = strpart(s:line_cur, s:pos_x)
+
+    let l:lines_prefix = getline(max([1, s:pos_y - g:llama_config.n_prefix]), s:pos_y - 1)
+    let l:lines_suffix = getline(s:pos_y + 1, min([l:max_y, s:pos_y + g:llama_config.n_suffix]))
+
+    " special handling of lines full of whitespaces - start from the beginning of the line
+    if match(s:line_cur, '^\s*$') >= 0
+        let l:indent = 0
+
+        let s:line_cur_prefix = ""
+        let s:line_cur_suffix = ""
+    else
+        " the indentation of the current line
+        let l:indent = strlen(matchstr(s:line_cur_prefix, '^\s*'))
+    endif
 
     if a:is_auto && len(s:line_cur_suffix) > g:llama_config.max_line_suffix
         return
@@ -445,9 +458,6 @@ function! llama#fim(is_auto, cache) abort
             \ })
     endfor
 
-    " the indentation of the current line
-    let l:indent = strlen(matchstr(s:line_cur_prefix, '^\s*'))
-
     let l:request = json_encode({
         \ 'input_prefix':     l:prefix,
         \ 'input_suffix':     l:suffix,
@@ -462,14 +472,14 @@ function! llama#fim(is_auto, cache) abort
         \ 'cache_prompt':     v:true,
         \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
         \ 't_max_predict_ms': g:llama_config.t_max_predict_ms,
-        \ 'response_fields':  [ 
+        \ 'response_fields':  [
         \                       "content",
-        \                       "timings/prompt_n", 
-        \                       "timings/prompt_ms", 
+        \                       "timings/prompt_n",
+        \                       "timings/prompt_ms",
         \                       "timings/prompt_per_token_ms",
         \                       "timings/prompt_per_second",
-        \                       "timings/predicted_n", 
-        \                       "timings/predicted_ms", 
+        \                       "timings/predicted_n",
+        \                       "timings/predicted_ms",
         \                       "timings/predicted_per_token_ms",
         \                       "timings/predicted_per_second",
         \                       "truncated",
@@ -486,6 +496,7 @@ function! llama#fim(is_auto, cache) abort
         \ "--header", "Content-Type: application/json",
         \ "--data", "@-",
         \ ]
+
     if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
@@ -580,7 +591,6 @@ endfunction
 " if accept_type == 'word', accept only the first word of the response
 function! llama#fim_accept(accept_type)
     if s:can_accept && len(s:content) > 0
-
         " insert suggestion on current line
         if a:accept_type != 'word'
             " insert first line of suggestion
@@ -608,7 +618,6 @@ function! llama#fim_accept(accept_type)
             " move cursor for multi-line suggestion
             call cursor(s:pos_y + len(s:content) - 1, s:pos_x + s:pos_dx + 1)
         endif
-
     endif
 
     call llama#fim_cancel()
@@ -684,7 +693,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " show the suggestion only in insert mode
-    if mode() !=# 'i'
+    if mode() !~# '\v^(i|ic|ix)$'
         return
     endif
 
@@ -808,6 +817,14 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     "        break
     "    endif
     "endfor
+
+    " if the current line is full of whitespaces, trim as much whitespaces from the suggestion
+    if match(s:line_cur, '^\s*$') >= 0
+        let l:lead = min([strlen(matchstr(s:content[0], '^\s*')), strlen(s:line_cur)])
+
+        let s:line_cur   = strpart(s:content[0], 0, l:lead)
+        let s:content[0] = strpart(s:content[0],    l:lead)
+    endif
 
     let s:pos_dx = len(s:content[-1])
 
