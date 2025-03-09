@@ -45,7 +45,7 @@ let s:default_config = {
     \ 'api_key':            '',
     \ 'n_prefix':           256,
     \ 'n_suffix':           64,
-    \ 'n_predict':          128,
+    \ 'n_predict':          256,
     \ 't_max_prompt_ms':    500,
     \ 't_max_predict_ms':   1500,
     \ 'show_info':          2,
@@ -115,9 +115,6 @@ function! llama#init()
 
     call llama#setup_commands()
 
-    let s:pos_x = 0 " cursor position upon start of completion
-    let s:pos_y = 0
-
     let s:line_cur = ''
 
     let s:line_cur_prefix = ''
@@ -131,7 +128,6 @@ function! llama#init()
 
     let s:hint_shown = v:false
     let s:pos_y_pick = -9999 " last y where we picked a chunk
-    let s:pos_dx = 0
 
     let s:timer_fim = -1
     let s:t_fim_start = reltime() " used to measure total FIM time
@@ -405,17 +401,14 @@ function! llama#fim(is_auto, cache) abort
 
     let s:t_fim_start = reltime()
 
-    let s:pos_x = col('.') - 1
-    let s:pos_y = line('.')
+    let l:pos_x = col('.') - 1
+    let l:pos_y = line('.')
     let l:max_y = line('$')
 
     let s:line_cur = getline('.')
 
-    let s:line_cur_prefix = strpart(s:line_cur, 0, s:pos_x)
-    let s:line_cur_suffix = strpart(s:line_cur, s:pos_x)
-
-    let l:lines_prefix = getline(max([1, s:pos_y - g:llama_config.n_prefix]), s:pos_y - 1)
-    let l:lines_suffix = getline(s:pos_y + 1, min([l:max_y, s:pos_y + g:llama_config.n_suffix]))
+    let s:line_cur_prefix = strpart(s:line_cur, 0, l:pos_x)
+    let s:line_cur_suffix = strpart(s:line_cur, l:pos_x)
 
     " special handling of lines full of whitespaces - start from the beginning of the line
     if match(s:line_cur, '^\s*$') >= 0
@@ -427,6 +420,9 @@ function! llama#fim(is_auto, cache) abort
         " the indentation of the current line
         let l:indent = strlen(matchstr(s:line_cur_prefix, '^\s*'))
     endif
+
+    let l:lines_prefix = getline(max([1, l:pos_y - g:llama_config.n_prefix]), l:pos_y - 1)
+    let l:lines_suffix = getline(l:pos_y + 1, min([l:max_y, l:pos_y + g:llama_config.n_suffix]))
 
     if a:is_auto && len(s:line_cur_suffix) > g:llama_config.max_line_suffix
         return
@@ -543,12 +539,12 @@ function! llama#fim(is_auto, cache) abort
     endif
 
     if a:cache && l:cached_completion != v:null
-        call s:fim_on_stdout(l:hash, a:cache, s:pos_x, s:pos_y, a:is_auto, 0, l:cached_completion)
+        call s:fim_on_stdout(l:hash, a:cache, l:pos_x, l:pos_y, a:is_auto, 0, l:cached_completion)
     else
         " send the request asynchronously
         if s:ghost_text_nvim
             let s:current_job = jobstart(l:curl_command, {
-                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, a:cache, s:pos_x, s:pos_y, a:is_auto]),
+                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y, a:is_auto]),
                 \ 'on_exit':   function('s:fim_on_exit'),
                 \ 'stdout_buffered': v:true
                 \ })
@@ -556,7 +552,7 @@ function! llama#fim(is_auto, cache) abort
             call chanclose(s:current_job, 'stdin')
         elseif s:ghost_text_vim
             let s:current_job = job_start(l:curl_command, {
-                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, a:cache, s:pos_x, s:pos_y, a:is_auto]),
+                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y, a:is_auto]),
                 \ 'exit_cb':   function('s:fim_on_exit')
                 \ })
 
@@ -567,19 +563,19 @@ function! llama#fim(is_auto, cache) abort
     endif
 
     " TODO: per-file location
-    let l:delta_y = abs(s:pos_y - s:pos_y_pick)
+    let l:delta_y = abs(l:pos_y - s:pos_y_pick)
 
     " gather some extra context nearby and process it in the background
     " only gather chunks if the cursor has moved a lot
     " TODO: something more clever? reranking?
     if a:is_auto && l:delta_y > 32
         " expand the prefix even further
-        call s:pick_chunk(getline(max([1,       s:pos_y - g:llama_config.ring_scope]), max([1,       s:pos_y - g:llama_config.n_prefix])), v:false, v:false)
+        call s:pick_chunk(getline(max([1,       l:pos_y - g:llama_config.ring_scope]), max([1,       l:pos_y - g:llama_config.n_prefix])), v:false, v:false)
 
         " pick a suffix chunk
-        call s:pick_chunk(getline(min([l:max_y, s:pos_y + g:llama_config.n_suffix]),   min([l:max_y, s:pos_y + g:llama_config.n_suffix + g:llama_config.ring_chunk_size])), v:false, v:false)
+        call s:pick_chunk(getline(min([l:max_y, l:pos_y + g:llama_config.n_suffix]),   min([l:max_y, l:pos_y + g:llama_config.n_suffix + g:llama_config.ring_chunk_size])), v:false, v:false)
 
-        let s:pos_y_pick = s:pos_y
+        let s:pos_y_pick = l:pos_y
     endif
 endfunction
 
@@ -587,6 +583,11 @@ endfunction
 " if accept_type == 'line', accept only the first line of the response
 " if accept_type == 'word', accept only the first word of the response
 function! llama#fim_accept(accept_type)
+    let l:pos_x = s:fim_data['pos_x']
+    let l:pos_y = s:fim_data['pos_y']
+
+    let l:pos_dx = s:fim_data['pos_dx']
+
     let l:can_accept = s:fim_data['can_accept']
     let l:content    = s:fim_data['content']
 
@@ -594,29 +595,29 @@ function! llama#fim_accept(accept_type)
         " insert suggestion on current line
         if a:accept_type != 'word'
             " insert first line of suggestion
-            call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . l:content[0])
+            call setline(l:pos_y, s:line_cur[:(l:pos_x - 1)] . l:content[0])
         else
             " insert first word of suggestion
-            let l:suffix = s:line_cur[(s:pos_x):]
+            let l:suffix = s:line_cur[(l:pos_x):]
             let l:word = matchstr(l:content[0][:-(len(l:suffix) + 1)], '^\s*\S\+')
-            call setline(s:pos_y, s:line_cur[:(s:pos_x - 1)] . l:word . l:suffix)
+            call setline(l:pos_y, s:line_cur[:(l:pos_x - 1)] . l:word . l:suffix)
         endif
 
         " insert rest of suggestion
         if len(l:content) > 1 && a:accept_type == 'full'
-            call append(s:pos_y, l:content[1:-1])
+            call append(l:pos_y, l:content[1:-1])
         endif
 
         " move cusor
         if a:accept_type == 'word'
             " move cursor to end of word
-            call cursor(s:pos_y, s:pos_x + len(l:word) + 1)
+            call cursor(l:pos_y, l:pos_x + len(l:word) + 1)
         elseif a:accept_type == 'line' || len(l:content) == 1
             " move cursor for 1-line suggestion
-            call cursor(s:pos_y, s:pos_x + len(l:content[0]))
+            call cursor(l:pos_y, l:pos_x + len(l:content[0]))
         else
             " move cursor for multi-line suggestion
-            call cursor(s:pos_y + len(l:content) - 1, s:pos_x + s:pos_dx + 1)
+            call cursor(l:pos_y + len(l:content) - 1, l:pos_x + l:pos_dx + 1)
         endif
     endif
 
@@ -704,9 +705,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     "    let l:can_accept = v:false
     "endif
 
-    let s:pos_x = a:pos_x
-    let s:pos_y = a:pos_y
-
     let l:can_accept = v:true
     let l:has_info   = v:false
 
@@ -775,7 +773,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " ... and the next lines are repeated
-    if len(l:content) > 1 && l:content[0] == "" && l:content[1:] == getline(s:pos_y + 1, s:pos_y + len(l:content) - 1)
+    if len(l:content) > 1 && l:content[0] == "" && l:content[1:] == getline(a:pos_y + 1, a:pos_y + len(l:content) - 1)
         let l:content = [""]
     endif
 
@@ -785,7 +783,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " find the first non-empty line (strip whitespace)
-    let l:cmp_y = s:pos_y + 1
+    let l:cmp_y = a:pos_y + 1
     while l:cmp_y < line('$') && getline(l:cmp_y) =~? '^\s*$'
         let l:cmp_y += 1
     endwhile
@@ -824,7 +822,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:content[0] = strpart(l:content[0],    l:lead)
     endif
 
-    let s:pos_dx = len(l:content[-1])
+    let l:pos_dx = len(l:content[-1])
 
     let l:content[-1] .= s:line_cur_suffix
 
@@ -873,12 +871,12 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
 
     " display the suggestion and append the info to the end of the first line
     if s:ghost_text_nvim
-        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, s:pos_y - 1, s:pos_x - 1, {
+        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, a:pos_y - 1, a:pos_x - 1, {
             \ 'virt_text': [[l:content[0], 'llama_hl_hint'], [l:info, 'llama_hl_info']],
             \ 'virt_text_win_col': virtcol('.') - 1
             \ })
 
-        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, s:pos_y - 1, 0, {
+        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, a:pos_y - 1, 0, {
             \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]}),
             \ 'virt_text_win_col': virtcol('.')
             \ })
@@ -886,13 +884,13 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:full_suffix = l:content[0]
         if !empty(l:full_suffix)
             let l:new_suffix = l:full_suffix[0:-len(getline('.')[col('.')-1:])-1]
-            call prop_add(s:pos_y, s:pos_x + 1, {
+            call prop_add(a:pos_y, a:pos_x + 1, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': l:new_suffix
                 \ })
         endif
         for line in l:content[1:]
-            call prop_add(s:pos_y, 0, {
+            call prop_add(a:pos_y, 0, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': line,
                 \ 'text_padding_left': s:get_indent(line),
@@ -900,7 +898,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
                 \ })
         endfor
         if !empty(l:info)
-            call prop_add(s:pos_y, 0, {
+            call prop_add(a:pos_y, 0, {
                 \ 'type': s:hlgroup_info,
                 \ 'text': l:info,
                 \ 'text_wrap': 'truncate'
@@ -914,6 +912,11 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
 
     let s:hint_shown = v:true
+
+    let s:fim_data['pos_x'] = a:pos_x
+    let s:fim_data['pos_y'] = a:pos_y
+
+    let s:fim_data['pos_dx'] = l:pos_dx
 
     let s:fim_data['can_accept'] = l:can_accept
     let s:fim_data['content']    = l:content
