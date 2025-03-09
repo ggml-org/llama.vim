@@ -534,12 +534,12 @@ function! llama#fim(is_auto, cache) abort
     endif
 
     if a:cache && l:cached_completion != v:null
-        call s:fim_on_stdout(l:hash, a:cache, l:pos_x, l:pos_y, 0, l:cached_completion)
+        call s:fim_on_response(l:hash, a:cache, 0, l:cached_completion)
     else
         " send the request asynchronously
         if s:ghost_text_nvim
             let s:current_job = jobstart(l:curl_command, {
-                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y]),
+                \ 'on_stdout': function('s:fim_on_response', [l:hash, a:cache]),
                 \ 'on_exit':   function('s:fim_on_exit'),
                 \ 'stdout_buffered': v:true
                 \ })
@@ -547,7 +547,7 @@ function! llama#fim(is_auto, cache) abort
             call chanclose(s:current_job, 'stdin')
         elseif s:ghost_text_vim
             let s:current_job = job_start(l:curl_command, {
-                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y]),
+                \ 'out_cb':    function('s:fim_on_response', [l:hash, a:cache]),
                 \ 'exit_cb':   function('s:fim_on_exit')
                 \ })
 
@@ -661,7 +661,7 @@ function! s:insert_cache(key, value)
 endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
-function! s:fim_on_stdout(hash, cache, pos_x, pos_y, job_id, data, event = v:null)
+function! s:fim_on_response(hash, cache, job_id, data, event = v:null)
     if a:cache && has_key(g:result_cache, a:hash)
         " retrieve the FIM result from cache
         let l:raw = get(g:result_cache, a:hash)
@@ -685,14 +685,6 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, job_id, data, event = v:nul
         call s:insert_cache(a:hash, l:raw)
     endif
 
-    " make sure cursor position hasn't changed since fim_on_stdout was triggered
-    if a:pos_x != col('.') - 1 || a:pos_y != line('.')
-        return
-    endif
-
-    let l:pos_x = a:pos_x
-    let l:pos_y = a:pos_y
-
     " show the suggestion only in insert mode
     if mode() !~# '\v^(i|ic|ix)$'
         return
@@ -704,6 +696,14 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, job_id, data, event = v:nul
 
     "    let l:can_accept = v:false
     "endif
+
+    call s:fim_render(l:raw, l:is_cached)
+endfunction
+
+" render a suggestion at the current cursor location
+function! s:fim_render(data, is_cached)
+    let l:raw = a:data
+    let l:is_cached = a:is_cached
 
     let l:can_accept = v:true
     let l:has_info   = v:false
@@ -758,6 +758,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, job_id, data, event = v:nul
         call add(l:content, "")
         let l:can_accept = v:false
     endif
+
+    let l:pos_x = col('.') - 1
+    let l:pos_y = line('.')
 
     let l:line_cur = getline('.')
 
