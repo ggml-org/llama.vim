@@ -45,7 +45,7 @@ let s:default_config = {
     \ 'api_key':            '',
     \ 'n_prefix':           256,
     \ 'n_suffix':           64,
-    \ 'n_predict':          256,
+    \ 'n_predict':          128,
     \ 't_max_prompt_ms':    500,
     \ 't_max_predict_ms':   1500,
     \ 'show_info':          2,
@@ -64,7 +64,20 @@ let s:default_config = {
 let llama_config = get(g:, 'llama_config', s:default_config)
 let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 
-let g:result_cache = {}
+let s:llama_enabled = v:true
+
+let g:cache_data = {}
+
+" TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
+function! s:cache_insert(key, value)
+    if len(keys(g:cache_data)) > (g:llama_config.max_cache_keys - 1)
+        let l:keys = keys(g:cache_data)
+        let l:hash = l:keys[rand() % len(l:keys)]
+        call remove(g:cache_data, l:hash)
+    endif
+
+    let g:cache_data[a:key] = a:value
+endfunction
 
 function! s:get_indent(str)
     let l:count = 0
@@ -75,6 +88,7 @@ function! s:get_indent(str)
             break
         endif
     endfor
+
     return l:count
 endfunction
 
@@ -82,10 +96,8 @@ function! s:rand(i0, i1) abort
     return a:i0 + rand() % (a:i1 - a:i0 + 1)
 endfunction
 
-let s:llama_enabled = v:true
-
 function! llama#disable()
-    call llama#fim_cancel()
+    call llama#fim_hide()
     autocmd! llama
     silent! iunmap <C-F>
 endfunction
@@ -129,7 +141,6 @@ function! llama#init()
     let s:t_last_move = reltime() " last time the cursor moved
 
     let s:current_job = v:null
-    let s:job_error = 0
 
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
     let s:ghost_text_vim = has('textprop')
@@ -152,11 +163,11 @@ function! llama#init()
     augroup llama
         autocmd!
         autocmd InsertEnter     * inoremap <expr> <silent> <C-F> llama#fim_inline(v:false, v:false)
-        autocmd InsertLeavePre  * call llama#fim_cancel()
+        autocmd InsertLeavePre  * call llama#fim_hide()
 
         autocmd CursorMoved     * call s:on_move()
         autocmd CursorMovedI    * call s:on_move()
-        autocmd CompleteChanged * call llama#fim_cancel()
+        "autocmd CompleteChanged * call llama#fim_hide()
 
         if g:llama_config.auto_fim
             autocmd CursorMovedI * call llama#fim(v:true, v:true)
@@ -173,7 +184,7 @@ function! llama#init()
         autocmd BufWritePost    * call s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
     augroup END
 
-    silent! call llama#fim_cancel()
+    silent! call llama#fim_hide()
 
     " init background update of the ring buffer
     if g:llama_config.ring_n_chunks > 0
@@ -365,45 +376,14 @@ function! s:ring_update()
     endif
 endfunction
 
-" necessary for 'inoremap <expr>'
-function! llama#fim_inline(is_auto, cache) abort
-    call llama#fim(a:is_auto, a:cache)
-    return ''
-endfunction
-
-" the main FIM call
-" takes local context around the cursor and sends it together with the extra context to the server for completion
-function! llama#fim(is_auto, cache) abort
-    " we already have a suggestion for the current cursor position
-    if s:hint_shown && !a:is_auto
-        call llama#fim_cancel()
-        return
-    endif
-
-    call llama#fim_cancel()
-
-    " avoid sending repeated requests too fast
-    if s:current_job != v:null
-        if s:timer_fim != -1
-            call timer_stop(s:timer_fim)
-            let s:timer_fim = -1
-        endif
-
-        let s:t_fim_start = reltime()
-        let s:timer_fim = timer_start(100, {-> llama#fim(v:true, a:cache)})
-        return
-    endif
-
-    let s:t_fim_start = reltime()
-
-    let l:pos_x = col('.') - 1
-    let l:pos_y = line('.')
+" get the local context at a specified position
+function! s:fim_ctx_local(pos_x, pos_y)
     let l:max_y = line('$')
 
-    let l:line_cur = getline('.')
+    let l:line_cur = getline(a:pos_y)
 
-    let l:line_cur_prefix = strpart(l:line_cur, 0, l:pos_x)
-    let l:line_cur_suffix = strpart(l:line_cur, l:pos_x)
+    let l:line_cur_prefix = strpart(l:line_cur, 0, a:pos_x)
+    let l:line_cur_suffix = strpart(l:line_cur, a:pos_x)
 
     " special handling of lines full of whitespaces - start from the beginning of the line
     if match(l:line_cur, '^\s*$') >= 0
@@ -416,12 +396,8 @@ function! llama#fim(is_auto, cache) abort
         let l:indent = strlen(matchstr(l:line_cur_prefix, '^\s*'))
     endif
 
-    let l:lines_prefix = getline(max([1, l:pos_y - g:llama_config.n_prefix]), l:pos_y - 1)
-    let l:lines_suffix = getline(l:pos_y + 1, min([l:max_y, l:pos_y + g:llama_config.n_suffix]))
-
-    if a:is_auto && len(l:line_cur_suffix) > g:llama_config.max_line_suffix
-        return
-    endif
+    let l:lines_prefix = getline(max([1, a:pos_y - g:llama_config.n_prefix]), a:pos_y - 1)
+    let l:lines_suffix = getline(a:pos_y + 1, min([l:max_y, a:pos_y + g:llama_config.n_suffix]))
 
     let l:prefix = ""
         \ . join(l:lines_prefix, "\n")
@@ -436,10 +412,77 @@ function! llama#fim(is_auto, cache) abort
         \ . join(l:lines_suffix, "\n")
         \ . "\n"
 
+    let l:res = {}
+
+    let l:res['prefix'] = l:prefix
+    let l:res['middle'] = l:middle
+    let l:res['suffix'] = l:suffix
+    let l:res['indent'] = l:indent
+
+    let l:res['line_cur'] = l:line_cur
+
+    let l:res['line_cur_prefix'] = l:line_cur_prefix
+    let l:res['line_cur_suffix'] = l:line_cur_suffix
+
+    return l:res
+endfunction
+
+" necessary for 'inoremap <expr>'
+function! llama#fim_inline(is_auto, use_cache) abort
+    " we already have a suggestion displayed - hide it
+    if s:hint_shown && !a:is_auto
+        call llama#fim_hide()
+        return ''
+    endif
+
+    call llama#fim(a:is_auto, a:use_cache)
+
+    return ''
+endfunction
+
+" the main FIM call
+" takes local context around the cursor and sends it together with the extra context to the server for completion
+function! llama#fim(is_auto, use_cache) abort
+    " avoid sending repeated requests too fast
+    if s:current_job != v:null
+        if s:timer_fim != -1
+            call timer_stop(s:timer_fim)
+            let s:timer_fim = -1
+        endif
+
+        let s:t_fim_start = reltime()
+        let s:timer_fim = timer_start(100, {-> llama#fim(v:true, a:use_cache)})
+        return
+    endif
+
+    let s:t_fim_start = reltime()
+
+    let l:pos_x = col('.') - 1
+    let l:pos_y = line('.')
+
+    let l:ctx_local = s:fim_ctx_local(l:pos_x, l:pos_y)
+
+    let l:prefix = l:ctx_local['prefix']
+    let l:middle = l:ctx_local['middle']
+    let l:suffix = l:ctx_local['suffix']
+    let l:indent = l:ctx_local['indent']
+
+    if a:is_auto && len(l:ctx_local['line_cur_suffix']) > g:llama_config.max_line_suffix
+        return
+    endif
+
+    let l:hash = sha256(l:prefix . 'Î' . l:middle . 'Î' . l:suffix)
+
+    if a:use_cache
+        if get(g:cache_data, l:hash, v:null) != v:null
+            return
+        endif
+    endif
+
     " prepare the extra context data
-    let l:extra_context = []
+    let l:extra_ctx = []
     for l:chunk in s:ring_chunks
-        call add(l:extra_context, {
+        call add(l:extra_ctx, {
             \ 'text':     l:chunk.str,
             \ 'time':     l:chunk.time,
             \ 'filename': l:chunk.filename
@@ -449,12 +492,12 @@ function! llama#fim(is_auto, cache) abort
     let l:request = json_encode({
         \ 'input_prefix':     l:prefix,
         \ 'input_suffix':     l:suffix,
-        \ 'input_extra':      l:extra_context,
+        \ 'input_extra':      l:extra_ctx,
         \ 'prompt':           l:middle,
         \ 'n_predict':        g:llama_config.n_predict,
         \ 'n_indent':         l:indent,
         \ 'top_k':            40,
-        \ 'top_p':            0.99,
+        \ 'top_p':            0.90,
         \ 'stream':           v:false,
         \ 'samplers':         ["top_k", "top_p", "infill"],
         \ 'cache_prompt':     v:true,
@@ -496,65 +539,25 @@ function! llama#fim(is_auto, cache) abort
             call job_stop(s:current_job)
         endif
     endif
-    let s:job_error = 0
 
-    " Construct hash from prefix, middle, and suffix with separators
-    let l:request_context = l:prefix . 'Î' . l:middle . 'Î' . l:suffix
-    let l:hash = sha256(l:request_context)
+    " send the request asynchronously
+    if s:ghost_text_nvim
+        let s:current_job = jobstart(l:curl_command, {
+            \ 'on_stdout': function('s:fim_on_response', [l:hash]),
+            \ 'on_exit':   function('s:fim_on_exit'),
+            \ 'stdout_buffered': v:true
+            \ })
+        call chansend(s:current_job, l:request)
+        call chanclose(s:current_job, 'stdin')
+    elseif s:ghost_text_vim
+        let s:current_job = job_start(l:curl_command, {
+            \ 'out_cb':    function('s:fim_on_response', [l:hash]),
+            \ 'exit_cb':   function('s:fim_on_exit')
+            \ })
 
-    if a:cache
-        " Check if the completion is cached
-        let l:cached_completion = get(g:result_cache, l:hash, v:null)
-
-        " ... or if there is a cached completion nearby (10 characters behind)
-        " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
-        " then it checks that the characters typed after (x,y) match up with the cached completion result.
-        if l:cached_completion == v:null
-            let l:past_text = l:prefix . 'Î' . l:middle
-            for i in range(10)
-                let l:removed_section = l:past_text[-(1 + i):]
-                let l:hash_txt = l:past_text[:-(2 + i)] . 'Î' . l:suffix
-                let l:temp_hash = sha256(l:hash_txt)
-                if has_key(g:result_cache, l:temp_hash)
-                    let l:temp_cached_completion = get(g:result_cache, l:temp_hash)
-                    if l:temp_cached_completion == ""
-                        break
-                    endif
-                    let l:response = json_decode(l:temp_cached_completion)
-                    if l:response['content'][0:i] !=# l:removed_section
-                        break
-                    endif
-                    let l:response['content'] = l:response['content'][i + 1:]
-                    let g:result_cache[l:hash] = json_encode(l:response)
-                    let l:cached_completion = g:result_cache[l:hash]
-                    break
-                endif
-            endfor
-        endif
-    endif
-
-    if a:cache && l:cached_completion != v:null
-        call s:fim_on_response(l:hash, a:cache, 0, l:cached_completion)
-    else
-        " send the request asynchronously
-        if s:ghost_text_nvim
-            let s:current_job = jobstart(l:curl_command, {
-                \ 'on_stdout': function('s:fim_on_response', [l:hash, a:cache]),
-                \ 'on_exit':   function('s:fim_on_exit'),
-                \ 'stdout_buffered': v:true
-                \ })
-            call chansend(s:current_job, l:request)
-            call chanclose(s:current_job, 'stdin')
-        elseif s:ghost_text_vim
-            let s:current_job = job_start(l:curl_command, {
-                \ 'out_cb':    function('s:fim_on_response', [l:hash, a:cache]),
-                \ 'exit_cb':   function('s:fim_on_exit')
-                \ })
-
-            let channel = job_getchannel(s:current_job)
-            call ch_sendraw(channel, l:request)
-            call ch_close_in(channel)
-        endif
+        let channel = job_getchannel(s:current_job)
+        call ch_sendraw(channel, l:request)
+        call ch_close_in(channel)
     endif
 
     " TODO: per-file location
@@ -564,6 +567,8 @@ function! llama#fim(is_auto, cache) abort
     " only gather chunks if the cursor has moved a lot
     " TODO: something more clever? reranking?
     if a:is_auto && l:delta_y > 32
+        let l:max_y = line('$')
+
         " expand the prefix even further
         call s:pick_chunk(getline(max([1,       l:pos_y - g:llama_config.ring_scope]), max([1,       l:pos_y - g:llama_config.n_prefix])), v:false, v:false)
 
@@ -617,10 +622,10 @@ function! llama#fim_accept(accept_type)
         endif
     endif
 
-    call llama#fim_cancel()
+    call llama#fim_hide()
 endfunction
 
-function! llama#fim_cancel()
+function! llama#fim_hide()
     let s:hint_shown = v:false
 
     " clear the virtual text
@@ -643,36 +648,20 @@ endfunction
 function! s:on_move()
     let s:t_last_move = reltime()
 
-    call llama#fim_cancel()
+    call llama#fim_hide()
+
+    let l:pos_x = col('.') - 1
+    let l:pos_y = line('.')
+
+    call s:fim_try_hint(l:pos_x, l:pos_y)
 endfunction
 
-" TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
-function! s:insert_cache(key, value)
-    if len(keys(g:result_cache)) > (g:llama_config.max_cache_keys - 1)
-        let l:keys = keys(g:result_cache)
-        let l:hash = l:keys[rand() % len(l:keys)]
-        call remove(g:result_cache, l:hash)
-    endif
-
-    " put just the raw content in the cache without metrics
-    let l:value = json_decode(a:value)
-    let l:value = get(l:value, 'content', '')
-    let g:result_cache[a:key] = json_encode({'content': l:value})
-endfunction
-
-" callback that processes the FIM result from the server and displays the suggestion
-function! s:fim_on_response(hash, cache, job_id, data, event = v:null)
-    if a:cache && has_key(g:result_cache, a:hash)
-        " retrieve the FIM result from cache
-        let l:raw = get(g:result_cache, a:hash)
-        let l:is_cached = v:true
-    else
-        if s:ghost_text_nvim
-            let l:raw = join(a:data, "\n")
-        elseif s:ghost_text_vim
-            let l:raw = a:data
-        endif
-        let l:is_cached = v:false
+" callback that processes the FIM result from the server
+function! s:fim_on_response(hash, job_id, data, event = v:null)
+    if s:ghost_text_nvim
+        let l:raw = join(a:data, "\n")
+    elseif s:ghost_text_vim
+        let l:raw = a:data
     endif
 
     " ignore empty results
@@ -680,30 +669,74 @@ function! s:fim_on_response(hash, cache, job_id, data, event = v:null)
         return
     endif
 
-    " save the FIM result to the cache
-    if !l:is_cached
-        call s:insert_cache(a:hash, l:raw)
-    endif
+    call s:cache_insert(a:hash, l:raw)
 
+    if !s:hint_shown
+        let l:pos_x = col('.') - 1
+        let l:pos_y = line('.')
+
+        call s:fim_try_hint(l:pos_x, l:pos_y)
+    endif
+endfunction
+
+" try to generate a suggestion using the data in the cache
+function! s:fim_try_hint(pos_x, pos_y)
     " show the suggestion only in insert mode
     if mode() !~# '\v^(i|ic|ix)$'
         return
     endif
 
-    " TODO: this does not seem to work as expected, so disabling for now
-    "if s:job_error || len(l:raw) == 0
-    "    let l:raw = json_encode({'content': '  llama.vim : cannot reach llama.cpp server. (:help llama)'})
+    let l:pos_x = a:pos_x
+    let l:pos_y = a:pos_y
 
-    "    let l:can_accept = v:false
-    "endif
+    let l:ctx_local = s:fim_ctx_local(l:pos_x, l:pos_y)
 
-    call s:fim_render(l:raw, l:is_cached)
+    let l:prefix = l:ctx_local['prefix']
+    let l:middle = l:ctx_local['middle']
+    let l:suffix = l:ctx_local['suffix']
+
+    let l:hash = sha256(l:prefix . 'Î' . l:middle . 'Î' . l:suffix)
+
+    " Check if the completion is cached
+    let l:raw = get(g:cache_data, l:hash, v:null)
+
+    " ... or if there is a cached completion nearby (10 characters behind)
+    " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
+    " then it checks that the characters typed after (x,y) match up with the cached completion result.
+    if l:raw == v:null
+        let l:pm = l:prefix . 'Î' . l:middle
+
+        for i in range(10)
+            let l:removed = l:pm[-(1 + i):]
+            let l:ctx_new = l:pm[:-(2 + i)] . 'Î' . l:suffix
+
+            let l:hash_new = sha256(l:ctx_new)
+            if has_key(g:cache_data, l:hash_new)
+                let l:response_cached = get(g:cache_data, l:hash_new)
+                if l:response_cached == ""
+                    break
+                endif
+
+                let l:response = json_decode(l:response_cached)
+                if l:response['content'][0:i] !=# l:removed
+                    break
+                endif
+
+                let l:response['content'] = l:response['content'][i + 1:]
+                let l:raw = json_encode(l:response)
+                break
+            endif
+        endfor
+    endif
+
+    if l:raw != v:null
+        call s:fim_render(l:pos_x, l:pos_y, l:raw)
+    endif
 endfunction
 
 " render a suggestion at the current cursor location
-function! s:fim_render(data, is_cached)
+function! s:fim_render(pos_x, pos_y, data)
     let l:raw = a:data
-    let l:is_cached = a:is_cached
 
     let l:can_accept = v:true
     let l:has_info   = v:false
@@ -737,8 +770,6 @@ function! s:fim_render(data, is_cached)
         " if response.timings is available
         if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
             \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
-            let l:has_info = v:true
-
             let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
             let l:t_prompt_ms = get(l:response, 'timings/prompt_ms', 1)
             let l:s_prompt    = get(l:response, 'timings/prompt_per_second', 0)
@@ -748,10 +779,7 @@ function! s:fim_render(data, is_cached)
             let l:s_predict    = get(l:response, 'timings/predicted_per_second', 0)
         endif
 
-        " if response was pulled from cache
-        if l:is_cached
-            let l:has_info = v:true
-        endif
+        let l:has_info = v:true
     endif
 
     if len(l:content) == 0
@@ -759,10 +787,10 @@ function! s:fim_render(data, is_cached)
         let l:can_accept = v:false
     endif
 
-    let l:pos_x = col('.') - 1
-    let l:pos_y = line('.')
+    let l:pos_x = a:pos_x
+    let l:pos_y = a:pos_y
 
-    let l:line_cur = getline('.')
+    let l:line_cur = getline(l:pos_y)
 
     " if the current line is full of whitespaces, trim as much whitespaces from the suggestion
     if match(l:line_cur, '^\s*$') >= 0
@@ -834,8 +862,6 @@ function! s:fim_render(data, is_cached)
 
     let l:content[-1] .= l:line_cur_suffix
 
-    call llama#fim_cancel()
-
     " display virtual text with the suggestion
     let l:bufnr = bufnr('%')
 
@@ -854,16 +880,11 @@ function! s:fim_render(data, is_cached)
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
                 \ l:n_cached
                 \ )
-        elseif l:is_cached
-            let l:info = printf("%s | C: %d / %d, | t: %.2f ms",
-                \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
-                \ len(keys(g:result_cache)), g:llama_config.max_cache_keys,
-                \ 1000.0 * reltimefloat(reltime(s:t_fim_start))
-                \ )
         else
-            let l:info = printf("%s | c: %d, r: %d / %d, e: %d, q: %d / 16 | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s) | t: %.2f ms",
+            let l:info = printf("%s | c: %d, r: %d/%d, e: %d, q: %d/16, C: %d/%d | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s) | t: %.2f ms",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
                 \ l:n_cached,  len(s:ring_chunks), g:llama_config.ring_n_chunks, s:ring_n_evict, len(s:ring_queued),
+                \ len(keys(g:cache_data)), g:llama_config.max_cache_keys,
                 \ l:n_prompt,  l:t_prompt_ms,  l:s_prompt,
                 \ l:n_predict, l:t_predict_ms, l:s_predict,
                 \ 1000.0 * reltimefloat(reltime(s:t_fim_start))
@@ -881,17 +902,17 @@ function! s:fim_render(data, is_cached)
     if s:ghost_text_nvim
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, l:pos_x - 1, {
             \ 'virt_text': [[l:content[0], 'llama_hl_hint'], [l:info, 'llama_hl_info']],
-            \ 'virt_text_win_col': virtcol('.') - 1
+            \ 'virt_text_win_col': l:pos_x
             \ })
 
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, 0, {
             \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]}),
-            \ 'virt_text_win_col': virtcol('.')
+            \ 'virt_text_win_col': l:pos_x + 1
             \ })
     elseif s:ghost_text_vim
         let l:full_suffix = l:content[0]
         if !empty(l:full_suffix)
-            let l:new_suffix = l:full_suffix[0:-len(getline('.')[col('.')-1:])-1]
+            let l:new_suffix = l:full_suffix[0:-len(l:line_cur[l:pos_x:])-1]
             call prop_add(l:pos_y, l:pos_x + 1, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': l:new_suffix
@@ -936,6 +957,5 @@ function! s:fim_on_exit(job_id, exit_code, event = v:null)
         echom "Job failed with exit code: " . a:exit_code
     endif
 
-    let s:job_error = a:exit_code
     let s:current_job = v:null
 endfunction
