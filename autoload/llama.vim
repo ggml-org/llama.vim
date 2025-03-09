@@ -427,7 +427,7 @@ function! llama#fim(is_auto, cache) abort
         \ . join(l:lines_prefix, "\n")
         \ . "\n"
 
-    let l:prompt = ""
+    let l:middle = ""
         \ . l:line_cur_prefix
 
     let l:suffix = ""
@@ -450,7 +450,7 @@ function! llama#fim(is_auto, cache) abort
         \ 'input_prefix':     l:prefix,
         \ 'input_suffix':     l:suffix,
         \ 'input_extra':      l:extra_context,
-        \ 'prompt':           l:prompt,
+        \ 'prompt':           l:middle,
         \ 'n_predict':        g:llama_config.n_predict,
         \ 'n_indent':         l:indent,
         \ 'top_k':            40,
@@ -498,8 +498,8 @@ function! llama#fim(is_auto, cache) abort
     endif
     let s:job_error = 0
 
-    " Construct hash from prefix, prompt, and suffix with separators
-    let l:request_context = l:prefix . 'Î' . l:prompt . 'Î' . l:suffix
+    " Construct hash from prefix, middle, and suffix with separators
+    let l:request_context = l:prefix . 'Î' . l:middle . 'Î' . l:suffix
     let l:hash = sha256(l:request_context)
 
     if a:cache
@@ -510,7 +510,7 @@ function! llama#fim(is_auto, cache) abort
         " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
         " then it checks that the characters typed after (x,y) match up with the cached completion result.
         if l:cached_completion == v:null
-            let l:past_text = l:prefix . 'Î' . l:prompt
+            let l:past_text = l:prefix . 'Î' . l:middle
             for i in range(10)
                 let l:removed_section = l:past_text[-(1 + i):]
                 let l:hash_txt = l:past_text[:-(2 + i)] . 'Î' . l:suffix
@@ -534,12 +534,12 @@ function! llama#fim(is_auto, cache) abort
     endif
 
     if a:cache && l:cached_completion != v:null
-        call s:fim_on_stdout(l:hash, a:cache, l:pos_x, l:pos_y, a:is_auto, 0, l:cached_completion)
+        call s:fim_on_stdout(l:hash, a:cache, l:pos_x, l:pos_y, 0, l:cached_completion)
     else
         " send the request asynchronously
         if s:ghost_text_nvim
             let s:current_job = jobstart(l:curl_command, {
-                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y, a:is_auto]),
+                \ 'on_stdout': function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y]),
                 \ 'on_exit':   function('s:fim_on_exit'),
                 \ 'stdout_buffered': v:true
                 \ })
@@ -547,7 +547,7 @@ function! llama#fim(is_auto, cache) abort
             call chanclose(s:current_job, 'stdin')
         elseif s:ghost_text_vim
             let s:current_job = job_start(l:curl_command, {
-                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y, a:is_auto]),
+                \ 'out_cb':    function('s:fim_on_stdout', [l:hash, a:cache, l:pos_x, l:pos_y]),
                 \ 'exit_cb':   function('s:fim_on_exit')
                 \ })
 
@@ -653,14 +653,15 @@ function! s:insert_cache(key, value)
         let l:hash = l:keys[rand() % len(l:keys)]
         call remove(g:result_cache, l:hash)
     endif
+
     " put just the raw content in the cache without metrics
-    let l:parsed_value = json_decode(a:value)
-    let l:stripped_content = get(l:parsed_value, 'content', '')
-    let g:result_cache[a:key] = json_encode({'content': l:stripped_content})
+    let l:value = json_decode(a:value)
+    let l:value = get(l:value, 'content', '')
+    let g:result_cache[a:key] = json_encode({'content': l:value})
 endfunction
 
 " callback that processes the FIM result from the server and displays the suggestion
-function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, event = v:null)
+function! s:fim_on_stdout(hash, cache, pos_x, pos_y, job_id, data, event = v:null)
     if a:cache && has_key(g:result_cache, a:hash)
         " retrieve the FIM result from cache
         let l:raw = get(g:result_cache, a:hash)
