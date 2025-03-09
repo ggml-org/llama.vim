@@ -115,11 +115,6 @@ function! llama#init()
 
     call llama#setup_commands()
 
-    let s:line_cur = ''
-
-    let s:line_cur_prefix = ''
-    let s:line_cur_suffix = ''
-
     let s:fim_data = {}
 
     let s:ring_chunks = [] " current set of chunks used as extra context
@@ -405,26 +400,26 @@ function! llama#fim(is_auto, cache) abort
     let l:pos_y = line('.')
     let l:max_y = line('$')
 
-    let s:line_cur = getline('.')
+    let l:line_cur = getline('.')
 
-    let s:line_cur_prefix = strpart(s:line_cur, 0, l:pos_x)
-    let s:line_cur_suffix = strpart(s:line_cur, l:pos_x)
+    let l:line_cur_prefix = strpart(l:line_cur, 0, l:pos_x)
+    let l:line_cur_suffix = strpart(l:line_cur, l:pos_x)
 
     " special handling of lines full of whitespaces - start from the beginning of the line
-    if match(s:line_cur, '^\s*$') >= 0
+    if match(l:line_cur, '^\s*$') >= 0
         let l:indent = 0
 
-        let s:line_cur_prefix = ""
-        let s:line_cur_suffix = ""
+        let l:line_cur_prefix = ""
+        let l:line_cur_suffix = ""
     else
         " the indentation of the current line
-        let l:indent = strlen(matchstr(s:line_cur_prefix, '^\s*'))
+        let l:indent = strlen(matchstr(l:line_cur_prefix, '^\s*'))
     endif
 
     let l:lines_prefix = getline(max([1, l:pos_y - g:llama_config.n_prefix]), l:pos_y - 1)
     let l:lines_suffix = getline(l:pos_y + 1, min([l:max_y, l:pos_y + g:llama_config.n_suffix]))
 
-    if a:is_auto && len(s:line_cur_suffix) > g:llama_config.max_line_suffix
+    if a:is_auto && len(l:line_cur_suffix) > g:llama_config.max_line_suffix
         return
     endif
 
@@ -433,10 +428,10 @@ function! llama#fim(is_auto, cache) abort
         \ . "\n"
 
     let l:prompt = ""
-        \ . s:line_cur_prefix
+        \ . l:line_cur_prefix
 
     let l:suffix = ""
-        \ . s:line_cur_suffix
+        \ . l:line_cur_suffix
         \ . "\n"
         \ . join(l:lines_suffix, "\n")
         \ . "\n"
@@ -583,10 +578,11 @@ endfunction
 " if accept_type == 'line', accept only the first line of the response
 " if accept_type == 'word', accept only the first word of the response
 function! llama#fim_accept(accept_type)
-    let l:pos_x = s:fim_data['pos_x']
-    let l:pos_y = s:fim_data['pos_y']
-
+    let l:pos_x  = s:fim_data['pos_x']
+    let l:pos_y  = s:fim_data['pos_y']
     let l:pos_dx = s:fim_data['pos_dx']
+
+    let l:line_cur = s:fim_data['line_cur']
 
     let l:can_accept = s:fim_data['can_accept']
     let l:content    = s:fim_data['content']
@@ -595,12 +591,12 @@ function! llama#fim_accept(accept_type)
         " insert suggestion on current line
         if a:accept_type != 'word'
             " insert first line of suggestion
-            call setline(l:pos_y, s:line_cur[:(l:pos_x - 1)] . l:content[0])
+            call setline(l:pos_y, l:line_cur[:(l:pos_x - 1)] . l:content[0])
         else
             " insert first word of suggestion
-            let l:suffix = s:line_cur[(l:pos_x):]
+            let l:suffix = l:line_cur[(l:pos_x):]
             let l:word = matchstr(l:content[0][:-(len(l:suffix) + 1)], '^\s*\S\+')
-            call setline(l:pos_y, s:line_cur[:(l:pos_x - 1)] . l:word . l:suffix)
+            call setline(l:pos_y, l:line_cur[:(l:pos_x - 1)] . l:word . l:suffix)
         endif
 
         " insert rest of suggestion
@@ -693,6 +689,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         return
     endif
 
+    let l:pos_x = a:pos_x
+    let l:pos_y = a:pos_y
+
     " show the suggestion only in insert mode
     if mode() !~# '\v^(i|ic|ix)$'
         return
@@ -759,6 +758,19 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:can_accept = v:false
     endif
 
+    let l:line_cur = getline('.')
+
+    " if the current line is full of whitespaces, trim as much whitespaces from the suggestion
+    if match(l:line_cur, '^\s*$') >= 0
+        let l:lead = min([strlen(matchstr(l:content[0], '^\s*')), strlen(l:line_cur)])
+
+        let l:line_cur   = strpart(l:content[0], 0, l:lead)
+        let l:content[0] = strpart(l:content[0],    l:lead)
+    endif
+
+    let l:line_cur_prefix = strpart(l:line_cur, 0, l:pos_x)
+    let l:line_cur_suffix = strpart(l:line_cur, l:pos_x)
+
     " NOTE: the following is logic for discarding predictions that repeat existing text
     "       the code is quite ugly and there is very likely a simpler and more canonical way to implement this
     "
@@ -773,22 +785,22 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     endif
 
     " ... and the next lines are repeated
-    if len(l:content) > 1 && l:content[0] == "" && l:content[1:] == getline(a:pos_y + 1, a:pos_y + len(l:content) - 1)
+    if len(l:content) > 1 && l:content[0] == "" && l:content[1:] == getline(l:pos_y + 1, l:pos_y + len(l:content) - 1)
         let l:content = [""]
     endif
 
     " truncate the suggestion if it repeats the suffix
-    if len(l:content) == 1 && l:content[0] == s:line_cur_suffix
+    if len(l:content) == 1 && l:content[0] == l:line_cur_suffix
         let l:content = [""]
     endif
 
     " find the first non-empty line (strip whitespace)
-    let l:cmp_y = a:pos_y + 1
+    let l:cmp_y = l:pos_y + 1
     while l:cmp_y < line('$') && getline(l:cmp_y) =~? '^\s*$'
         let l:cmp_y += 1
     endwhile
 
-    if (s:line_cur_prefix . l:content[0]) == getline(l:cmp_y)
+    if (l:line_cur_prefix . l:content[0]) == getline(l:cmp_y)
         " truncate the suggestion if it repeats the next line
         if len(l:content) == 1
             let l:content = [""]
@@ -805,8 +817,8 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         endif
     endif
 
-    " keep only lines that have the same or larger whitespace prefix as s:line_cur_prefix
-    "let l:indent = strlen(matchstr(s:line_cur_prefix, '^\s*'))
+    " keep only lines that have the same or larger whitespace prefix as l:line_cur_prefix
+    "let l:indent = strlen(matchstr(l:line_cur_prefix, '^\s*'))
     "for i in range(1, len(l:content) - 1)
     "    if strlen(matchstr(l:content[i], '^\s*')) < l:indent
     "        let l:content = l:content[:i - 1]
@@ -814,17 +826,9 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
     "    endif
     "endfor
 
-    " if the current line is full of whitespaces, trim as much whitespaces from the suggestion
-    if match(s:line_cur, '^\s*$') >= 0
-        let l:lead = min([strlen(matchstr(l:content[0], '^\s*')), strlen(s:line_cur)])
-
-        let s:line_cur   = strpart(l:content[0], 0, l:lead)
-        let l:content[0] = strpart(l:content[0],    l:lead)
-    endif
-
     let l:pos_dx = len(l:content[-1])
 
-    let l:content[-1] .= s:line_cur_suffix
+    let l:content[-1] .= l:line_cur_suffix
 
     call llama#fim_cancel()
 
@@ -871,12 +875,12 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
 
     " display the suggestion and append the info to the end of the first line
     if s:ghost_text_nvim
-        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, a:pos_y - 1, a:pos_x - 1, {
+        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, l:pos_x - 1, {
             \ 'virt_text': [[l:content[0], 'llama_hl_hint'], [l:info, 'llama_hl_info']],
             \ 'virt_text_win_col': virtcol('.') - 1
             \ })
 
-        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, a:pos_y - 1, 0, {
+        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, 0, {
             \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]}),
             \ 'virt_text_win_col': virtcol('.')
             \ })
@@ -884,13 +888,13 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
         let l:full_suffix = l:content[0]
         if !empty(l:full_suffix)
             let l:new_suffix = l:full_suffix[0:-len(getline('.')[col('.')-1:])-1]
-            call prop_add(a:pos_y, a:pos_x + 1, {
+            call prop_add(l:pos_y, l:pos_x + 1, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': l:new_suffix
                 \ })
         endif
         for line in l:content[1:]
-            call prop_add(a:pos_y, 0, {
+            call prop_add(l:pos_y, 0, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': line,
                 \ 'text_padding_left': s:get_indent(line),
@@ -898,7 +902,7 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
                 \ })
         endfor
         if !empty(l:info)
-            call prop_add(a:pos_y, 0, {
+            call prop_add(l:pos_y, 0, {
                 \ 'type': s:hlgroup_info,
                 \ 'text': l:info,
                 \ 'text_wrap': 'truncate'
@@ -913,10 +917,11 @@ function! s:fim_on_stdout(hash, cache, pos_x, pos_y, is_auto, job_id, data, even
 
     let s:hint_shown = v:true
 
-    let s:fim_data['pos_x'] = a:pos_x
-    let s:fim_data['pos_y'] = a:pos_y
-
+    let s:fim_data['pos_x']  = l:pos_x
+    let s:fim_data['pos_y']  = l:pos_y
     let s:fim_data['pos_dx'] = l:pos_dx
+
+    let s:fim_data['line_cur'] = l:line_cur
 
     let s:fim_data['can_accept'] = l:can_accept
     let s:fim_data['content']    = l:content
