@@ -741,7 +741,7 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         call s:cache_insert(l:hash, l:raw)
     endfor
 
-    if !s:hint_shown
+    if !s:hint_shown || !s:fim_data['can_accept']
         let l:pos_x = col('.') - 1
         let l:pos_y = line('.')
 
@@ -946,9 +946,9 @@ function! s:fim_render(pos_x, pos_y, data)
 
     let l:content[-1] .= l:line_cur_suffix
 
-    " if only whitespaces - do not display
+    " if only whitespaces - do not accept
     if join(l:content, "\n") =~? '^\s*$'
-        return
+        let l:can_accept = v:false
     endif
 
     " display virtual text with the suggestion
