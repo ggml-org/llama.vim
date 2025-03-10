@@ -167,7 +167,9 @@ function! llama#init()
 
         autocmd CursorMoved     * call s:on_move()
         autocmd CursorMovedI    * call s:on_move()
-        "autocmd CompleteChanged * call llama#fim_hide()
+
+        autocmd CompleteChanged * call llama#fim_hide()
+        autocmd CompleteDone    * call s:on_move()
 
         if g:llama_config.auto_fim
             autocmd CursorMovedI * call llama#fim(v:true, v:true)
@@ -736,6 +738,11 @@ endfunction
 
 " render a suggestion at the current cursor location
 function! s:fim_render(pos_x, pos_y, data)
+    " do not show if there is a completion in progress
+    if pumvisible()
+        return
+    endif
+
     let l:raw = a:data
 
     let l:can_accept = v:true
