@@ -66,6 +66,9 @@ let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 
 let s:llama_enabled = v:true
 
+" containes cached responses from the server
+" used to avoid re-computing the same completions and to also create new completions with similar context
+" ref: https://github.com/ggml-org/llama.vim/pull/18
 let g:cache_data = {}
 
 " TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
@@ -79,6 +82,7 @@ function! s:cache_insert(key, value)
     let g:cache_data[a:key] = a:value
 endfunction
 
+" get the number of leading spaces of a string
 function! s:get_indent(str)
     let l:count = 0
     for i in range(len(a:str))
@@ -135,7 +139,7 @@ function! llama#init()
 
     let s:hint_shown = v:false
     let s:pos_y_pick = -9999 " last y where we picked a chunk
-    let s:indent_last = -1 " last indentation level that was accepted
+    let s:indent_last = -1   " last indentation level that was accepted (TODO: this might be buggy)
 
     let s:timer_fim = -1
     let s:t_last_move = reltime() " last time the cursor moved
@@ -172,7 +176,7 @@ function! llama#init()
         autocmd CompleteDone    * call s:on_move()
 
         if g:llama_config.auto_fim
-            autocmd CursorMovedI * call llama#fim(col('.') - 1, line('.'), v:true, [], v:true)
+            autocmd CursorMovedI * call llama#fim(-1, -1, v:true, [], v:true)
         endif
 
         " gather chunks upon yanking
@@ -379,6 +383,8 @@ function! s:ring_update()
 endfunction
 
 " get the local context at a specified position
+" a:prev can optionally contain a previous completion for this position
+"   in such cases, create the local context as if the completion was already inserted
 function! s:fim_ctx_local(pos_x, pos_y, prev)
     let l:max_y = line('$')
 
@@ -461,10 +467,7 @@ function! llama#fim_inline(is_auto, use_cache) abort
         return ''
     endif
 
-    let l:pos_x = col('.') - 1
-    let l:pos_y = line('.')
-
-    call llama#fim(l:pos_x, l:pos_y, a:is_auto, [], a:use_cache)
+    call llama#fim(-1, -1, a:is_auto, [], a:use_cache)
 
     return ''
 endfunction
@@ -472,6 +475,17 @@ endfunction
 " the main FIM call
 " takes local context around the cursor and sends it together with the extra context to the server for completion
 function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
+    let l:pos_x = a:pos_x
+    let l:pos_y = a:pos_y
+
+    if l:pos_x < 0
+        let l:pos_x = col('.') - 1
+    endif
+
+    if l:pos_y < 0
+        let l:pos_y = line('.')
+    endif
+
     " avoid sending repeated requests too fast
     if s:current_job != v:null
         if s:timer_fim != -1
@@ -487,10 +501,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     "    return
     "endif
 
-    let s:t_fim_start = reltime()
-
-    let l:pos_x = a:pos_x
-    let l:pos_y = a:pos_y
+    "let s:t_fim_start = reltime()
 
     let l:ctx_local = s:fim_ctx_local(l:pos_x, l:pos_y, a:prev)
 
@@ -505,10 +516,14 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
 
     let l:t_max_predict_ms = g:llama_config.t_max_predict_ms
     if empty(a:prev)
-        " the first request is quick
+        " the first request is quick - we will launch a speculative request after this one is displayed
         let l:t_max_predict_ms = 250
     endif
 
+    " compute multiple hashes that can be used to generate a completion for which the
+    "   first few lines are missing. this happens when we have scrolled down a bit from where the original
+    "   generation was done
+    "
     let l:hashes = []
 
     call add(l:hashes, sha256(l:prefix . l:middle . 'Î' . l:suffix))
@@ -516,9 +531,14 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     let l:prefix_trim = l:prefix
     for i in range(3)
         let l:prefix_trim = substitute(l:prefix_trim, '^[^\n]*\n', '', '')
+        if empty(l:prefix_trim)
+            break
+        endif
+
         call add(l:hashes, sha256(l:prefix_trim . l:middle . 'Î' . l:suffix))
     endfor
 
+    " if we already have a cached completion for one of the hashes, don't send a request
     if a:use_cache
         for l:hash in l:hashes
             if get(g:cache_data, l:hash, v:null) != v:null
@@ -527,8 +547,10 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         endfor
     endif
 
+    " TODO: this might be incorrect
     let s:indent_last = l:indent
 
+    " TODO: refactor in a function
     let l:text = getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')]))
 
     let l:l0 = s:rand(0, max([0, len(l:text) - g:llama_config.ring_chunk_size/2]))
@@ -537,8 +559,9 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     let l:chunk = l:text[l:l0:l:l1]
 
     " evict chunks that are very similar to the current context
+    " this is needed because such chunks usually distort the completion to repeat what was already there
     for i in range(len(s:ring_chunks) - 1, 0, -1)
-        if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.4
+        if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
             call remove(s:ring_chunks, i)
             let s:ring_n_evict += 1
         endif
@@ -680,8 +703,8 @@ function! llama#fim_accept(accept_type)
         elseif a:accept_type == 'line' || len(l:content) == 1
             " move cursor for 1-line suggestion
             call cursor(l:pos_y, l:pos_x + len(l:content[0]) + 1)
-            if len(l:content) > 1
-                " insert enter to move to next line
+            if len(l:content) > 2
+                " simulate pressing Enter to move to next line
                 call feedkeys("\<CR>")
             endif
         else
@@ -737,10 +760,12 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         return
     endif
 
+    " put the response in the cache
     for l:hash in a:hashes
         call s:cache_insert(l:hash, l:raw)
     endfor
 
+    " if nothing is currently displayed - show the hint directly
     if !s:hint_shown || !s:fim_data['can_accept']
         let l:pos_x = col('.') - 1
         let l:pos_y = line('.')
@@ -809,6 +834,7 @@ function! s:fim_try_hint(pos_x, pos_y)
     if l:raw != v:null
         call s:fim_render(l:pos_x, l:pos_y, l:raw)
 
+        " run async speculative FIM in the background for this position
         if s:hint_shown
             call llama#fim(l:pos_x, l:pos_y, v:true, s:fim_data['content'], v:true)
         endif
