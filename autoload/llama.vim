@@ -955,12 +955,12 @@ function! s:fim_render(pos_x, pos_y, data)
     if s:ghost_text_nvim
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, l:pos_x - 1, {
             \ 'virt_text': [[l:content[0], 'llama_hl_hint'], [l:info, 'llama_hl_info']],
-            \ 'virt_text_win_col': l:pos_x
+            \ 'virt_text_win_col': virtcol('.') - 1
             \ })
 
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, 0, {
             \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]}),
-            \ 'virt_text_win_col': l:pos_x + 1
+            \ 'virt_text_win_col': virtcol('.')
             \ })
     elseif s:ghost_text_vim
         let l:full_suffix = l:content[0]
