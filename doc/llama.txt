@@ -14,12 +14,12 @@ Requires:
 
 
 ================================================================================
-Shortcut
+Default Shortcut
 
 - Tab       - accept the current suggestion
 - Shift+Tab - accept just the first line of the suggestion
 - Ctrl+B    - accept just the first word of the suggestion
-- Ctrl+F    - toggle FIM completion manually
+- Ctrl+F    - trigger FIM completion manually
 
 ================================================================================
 Commands
@@ -99,6 +99,7 @@ Currently the default config is:
 		    \ 'ring_chunk_size':    64,
 		    \ 'ring_scope':         1024,
 		    \ 'ring_update_ms':     1000,
+		    \ 'keymap_trigger':     "<C-F>",
 		    \ 'keymap_accept_full': "<Tab>",
 		    \ 'keymap_accept_line': "<S-Tab>",
 		    \ 'keymap_accept_word': "<C-B>",
@@ -151,10 +152,13 @@ parameters for the ring-buffer with extra context:
 
 keymaps parameters:
 
-- {keymap_accept_full}	accept full suggestion keymap, default: <Tab>
+- {keymap_trigger}		keymap to trigger the auto completion, default: <C-F>
 
-- {keymap_accept_line}	accept line suggestion keymap, default: <S-Tab>
-- {keymap_accept_word}	accept word suggestion keymap, default: <C-B>
+- {keymap_accept_full}	keymap to accept full suggestion, default: <Tab>
+
+- {keymap_accept_line}	keymap to accept line suggestion, default: <S-Tab>
+
+- {keymap_accept_word}	keymap to accept word suggestion, default: <C-B>
 
 Example:
 
@@ -171,15 +175,15 @@ Example:
 3. Disable auto FIM completion, etc (lazy.nvim, lua):
 >lua
 		{
-				'ggml-org/llama.vim',
-				init = function()
-						vim.g.llama_config = {
-								n_prefix = 1024,
-								n_suffix= 1024,
-								auto_fim = false,
-								keymap_accept_full = "<C-S>",
-						}
-				end,
+			'ggml-org/llama.vim',
+			init = function()
+				vim.g.llama_config = {
+					n_prefix = 1024,
+					n_suffix= 1024,
+					auto_fim = false,
+					keymap_accept_full = "<C-S>",
+				}
+			end,
 		}
 <
 To adjust the colors for hint and info texts, `llama.vim` provides the
