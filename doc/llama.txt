@@ -190,6 +190,21 @@ Example:
 			end,
 		}
 <
+4. Force single-line FIM completion (lazy.nvim, lua):
+>lua
+		{
+			'ggml-org/llama.vim',
+			init = function()
+				vim.g.llama_config = {
+					n_prefix = 1024,
+					n_suffix= 1024,
+					auto_fim = false,
+					keymap_accept_full = "<C-S>",
+					stop_strings = { "\n" },
+				}
+			end,
+		}
+<
 To adjust the colors for hint and info texts, `llama.vim` provides the
 highlight group `llama_hl_hint` and `llama_hl_info`. You can modify these
 groups using the normal way.
