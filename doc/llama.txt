@@ -89,6 +89,7 @@ Currently the default config is:
 		    \ 'n_prefix':           256,
 		    \ 'n_suffix':           64,
 		    \ 'n_predict':          128,
+		    \ 'stop_strings':       [],
 		    \ 't_max_prompt_ms':    500,
 		    \ 't_max_predict_ms':   500,
 		    \ 'show_info':          2,
@@ -117,6 +118,9 @@ Currently the default config is:
 						in the local suffix
 
 - {n_predict}			max number of tokens to predict
+
+- {stop_strings}		return the result immediately as soon as any of these
+						strings are encountered in the generated text
 
 - {t_max_prompt_ms}		max alloted time for the prompt processing
 						(TODO: not yet supported)

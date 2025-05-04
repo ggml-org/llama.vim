@@ -10,6 +10,7 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "   n_prefix:         number of lines before the cursor location to include in the local prefix
 "   n_suffix:         number of lines after  the cursor location to include in the local suffix
 "   n_predict:        max number of tokens to predict
+"   stop_strings      return the result immediately as soon as any of these strings are encountered in the generated text
 "   t_max_prompt_ms:  max alloted time for the prompt processing (TODO: not yet supported)
 "   t_max_predict_ms: max alloted time for the prediction
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
@@ -47,6 +48,7 @@ let s:default_config = {
     \ 'n_prefix':           256,
     \ 'n_suffix':           64,
     \ 'n_predict':          128,
+    \ 'stop_strings':       [],
     \ 't_max_prompt_ms':    500,
     \ 't_max_predict_ms':   1000,
     \ 'show_info':          2,
@@ -585,6 +587,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ 'input_extra':      l:extra_ctx,
         \ 'prompt':           l:middle,
         \ 'n_predict':        g:llama_config.n_predict,
+        \ 'stop':             g:llama_config.stop_strings,
         \ 'n_indent':         l:indent,
         \ 'top_k':            40,
         \ 'top_p':            0.90,
