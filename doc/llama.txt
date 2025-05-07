@@ -197,7 +197,7 @@ Example:
 			init = function()
 				vim.g.llama_config = {
 					n_prefix = 1024,
-					n_suffix= 1024,
+					n_suffix = 1024,
 					auto_fim = false,
 					keymap_accept_full = "<C-S>",
 					stop_strings = { "\n" },
