@@ -5,18 +5,20 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 
 " general parameters:
 "
-"   endpoint:         llama.cpp server endpoint
-"   api_key:          llama.cpp server api key (optional)
-"   n_prefix:         number of lines before the cursor location to include in the local prefix
-"   n_suffix:         number of lines after  the cursor location to include in the local suffix
-"   n_predict:        max number of tokens to predict
-"   stop_strings      return the result immediately as soon as any of these strings are encountered in the generated text
-"   t_max_prompt_ms:  max alloted time for the prompt processing (TODO: not yet supported)
-"   t_max_predict_ms: max alloted time for the prediction
-"   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
-"   auto_fim:         trigger FIM completion automatically on cursor movement
-"   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
-"   max_cache_keys:   max number of cached completions to keep in result_cache
+"   endpoint:             llama.cpp server endpoint
+"   api_key:              llama.cpp server api key (optional)
+"   n_prefix:             number of lines before the cursor location to include in the local prefix
+"   n_suffix:             number of lines after  the cursor location to include in the local suffix
+"   n_predict:            max number of tokens to predict
+"   stop_strings:         return the result immediately as soon as any of these strings are encountered in the generated text
+"   t_max_prompt_ms:      max alloted time for the prompt processing (TODO:     not yet supported)
+"   t_max_predict_ms:     max alloted time for the prediction
+"   show_info:            show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
+"   auto_fim:             trigger FIM completion automatically on cursor movement
+"   auto_fim_debounce_ms: min time before consecutive fim call for auto_fim.
+"   Does not affect speculative fim.
+"   max_line_suffix:      do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
+"   max_cache_keys:       max number of cached completions to keep in result_cache
 "
 " ring buffer of chunks, accumulated with time upon:
 "
@@ -43,26 +45,27 @@ highlight llama_hl_info guifg=#77ff2f ctermfg=119
 "   keymap_accept_word: keymap to accept word suggestion, default: <C-B>
 "
 let s:default_config = {
-    \ 'endpoint':           'http://127.0.0.1:8012/infill',
-    \ 'api_key':            '',
-    \ 'n_prefix':           256,
-    \ 'n_suffix':           64,
-    \ 'n_predict':          128,
-    \ 'stop_strings':       [],
-    \ 't_max_prompt_ms':    500,
-    \ 't_max_predict_ms':   1000,
-    \ 'show_info':          2,
-    \ 'auto_fim':           v:true,
-    \ 'max_line_suffix':    8,
-    \ 'max_cache_keys':     250,
-    \ 'ring_n_chunks':      16,
-    \ 'ring_chunk_size':    64,
-    \ 'ring_scope':         1024,
-    \ 'ring_update_ms':     1000,
-    \ 'keymap_trigger':     "<C-F>",
-    \ 'keymap_accept_full': "<Tab>",
-    \ 'keymap_accept_line': "<S-Tab>",
-    \ 'keymap_accept_word': "<C-B>",
+    \ 'endpoint':             'http://127.0.0.1:8012/infill',
+    \ 'api_key':              '',
+    \ 'n_prefix':             256,
+    \ 'n_suffix':             64,
+    \ 'n_predict':            128,
+    \ 'stop_strings':         [],
+    \ 't_max_prompt_ms':      500,
+    \ 't_max_predict_ms':     1000,
+    \ 'show_info':            2,
+    \ 'auto_fim':             v:true,
+    \ 'auto_fim_debounce_ms': 100,
+    \ 'max_line_suffix':      8,
+    \ 'max_cache_keys':       250,
+    \ 'ring_n_chunks':        16,
+    \ 'ring_chunk_size':      64,
+    \ 'ring_scope':           1024,
+    \ 'ring_update_ms':       1000,
+    \ 'keymap_trigger':       "<C-F>",
+    \ 'keymap_accept_full':   "<Tab>",
+    \ 'keymap_accept_line':   "<S-Tab>",
+    \ 'keymap_accept_word':   "<C-B>",
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -146,6 +149,7 @@ function! llama#init()
     let s:indent_last = -1   " last indentation level that was accepted (TODO: this might be buggy)
 
     let s:timer_fim = -1
+    let s:timer_debounce = -1
     let s:t_last_move = reltime() " last time the cursor moved
 
     let s:current_job = v:null
@@ -180,7 +184,7 @@ function! llama#init()
         autocmd CompleteDone    * call s:on_move()
 
         if g:llama_config.auto_fim
-            autocmd CursorMovedI * call llama#fim(-1, -1, v:true, [], v:true)
+            autocmd CursorMovedI * call llama#fim_debounced(-1, -1, v:true, [], v:true)
         endif
 
         " gather chunks upon yanking
@@ -475,6 +479,17 @@ function! llama#fim_inline(is_auto, use_cache) abort
 
     return ''
 endfunction
+
+" a wrapper of llama#fim with debounce timer.
+function! llama#fim_debounced(...) abort
+  if s:timer_debounce != -1
+    call timer_stop(s:timer_debounce)
+  endif
+
+  let l:args = a:000
+  let s:timer_debounce = timer_start(g:llama_config.auto_fim_debounce_ms, { -> call('llama#fim', l:args) })
+endfunction
+
 
 " the main FIM call
 " takes local context around the cursor and sends it together with the extra context to the server for completion
