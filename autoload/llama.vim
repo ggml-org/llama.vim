@@ -958,9 +958,9 @@ function! s:fim_render(pos_x, pos_y, data)
 
     " display the suggestion and append the info to the end of the first line
     if s:ghost_text_nvim
-        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, l:pos_x - 1, {
+        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, l:pos_x, {
             \ 'virt_text': [[l:content[0], 'llama_hl_hint'], [l:info, 'llama_hl_info']],
-            \ 'virt_text_win_col': virtcol('.') - 1
+            \ 'virt_text_pos': l:content == [""] ? 'eol' : 'overlay'
             \ })
 
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, 0, {
