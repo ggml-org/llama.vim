@@ -964,8 +964,7 @@ function! s:fim_render(pos_x, pos_y, data)
             \ })
 
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, 0, {
-            \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]}),
-            \ 'virt_text_win_col': virtcol('.')
+            \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]})
             \ })
     elseif s:ghost_text_vim
         let l:full_suffix = l:content[0]
