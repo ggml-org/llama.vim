@@ -685,6 +685,16 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         return
     endif
 
+    " ensure the response is valid JSON, starting with a fast check before full decode
+    if l:raw !~# '^\s*{' || l:raw !~# '\v"content"\s*:"'
+        return
+    endif
+    try
+        let l:response = json_decode(l:raw)
+    catch
+        return
+    endtry
+
     " put the response in the cache
     for l:hash in a:hashes
         call s:cache_insert(l:hash, l:raw)
