@@ -50,7 +50,7 @@ let s:default_config = {
     \ 'n_predict':          128,
     \ 'stop_strings':       [],
     \ 't_max_prompt_ms':    500,
-    \ 't_max_predict_ms':   1000,
+    \ 't_max_predict_ms':   500,
     \ 'show_info':          2,
     \ 'auto_fim':           v:true,
     \ 'max_line_suffix':    8,
@@ -200,6 +200,15 @@ function! llama#init()
     if g:llama_config.ring_n_chunks > 0
         call s:ring_update()
     endif
+
+    " for debugging
+    call timer_start(100, {-> s:update_status()})
+endfunction
+
+function! s:update_status()
+    let &statusline = 'indent = ' . s:indent_last
+
+    call timer_start(100, {-> s:update_status()})
 endfunction
 
 " compute how similar two chunks of text are
@@ -401,15 +410,13 @@ function! s:fim_ctx_local(pos_x, pos_y, prev)
         let l:lines_prefix = getline(max([1, a:pos_y - g:llama_config.n_prefix]), a:pos_y - 1)
         let l:lines_suffix = getline(a:pos_y + 1, min([l:max_y, a:pos_y + g:llama_config.n_suffix]))
 
+        " the indentation of the current line
+        let l:indent = strlen(matchstr(l:line_cur, '^\s*'))
+
         " special handling of lines full of whitespaces - start from the beginning of the line
         if match(l:line_cur, '^\s*$') >= 0
-            let l:indent = 0
-
             let l:line_cur_prefix = ""
             let l:line_cur_suffix = ""
-        else
-            " the indentation of the current line
-            let l:indent = strlen(matchstr(l:line_cur, '^\s*'))
         endif
     else
         if len(a:prev) == 1
@@ -519,9 +526,9 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     endif
 
     let l:t_max_predict_ms = g:llama_config.t_max_predict_ms
-    if empty(a:prev)
-        " the first request is quick - we will launch a speculative request after this one is displayed
-        let l:t_max_predict_ms = 250
+    if !empty(a:prev)
+        " give more time for the speculative FIM
+        let l:t_max_predict_ms = min([3*g:llama_config.t_max_predict_ms, 3000])
     endif
 
     " compute multiple hashes that can be used to generate a completion for which the
@@ -551,8 +558,10 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         endfor
     endif
 
-    " TODO: this might be incorrect
-    let s:indent_last = l:indent
+    " update only for non-speculative fims
+    if empty(a:prev)
+        let s:indent_last = l:indent
+    endif
 
     " TODO: refactor in a function
     let l:text = getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')]))
@@ -890,6 +899,11 @@ function! s:fim_render(pos_x, pos_y, data)
     " truncate the suggestion if it repeats the suffix
     if len(l:content) == 1 && l:content[0] == l:line_cur_suffix
         let l:content = [""]
+    endif
+
+    " truncate the last line if it repeats the next line
+    if len(l:content) > 1 && l:content[-1] == getline(l:pos_y + 1)
+        let l:content = l:content[0:-2]
     endif
 
     " find the first non-empty line (strip whitespace)
