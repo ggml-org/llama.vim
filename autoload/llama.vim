@@ -564,12 +564,12 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
 
     " evict chunks that are very similar to the current context
     " this is needed because such chunks usually distort the completion to repeat what was already there
-    for i in range(len(s:ring_chunks) - 1, 0, -1)
-        if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
-            call remove(s:ring_chunks, i)
-            let s:ring_n_evict += 1
-        endif
-    endfor
+    "for i in range(len(s:ring_chunks) - 1, 0, -1)
+    "    if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
+    "        call remove(s:ring_chunks, i)
+    "        let s:ring_n_evict += 1
+    "    endif
+    "endfor
 
     " prepare the extra context data
     let l:extra_ctx = []
