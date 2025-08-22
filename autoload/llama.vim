@@ -17,6 +17,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "   auto_fim:         trigger FIM completion automatically on cursor movement
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
 "   max_cache_keys:   max number of cached completions to keep in result_cache
+"   enable_at_startup: enable llama.vim functionality at startup (default: v:true)
 "
 " ring buffer of chunks, accumulated with time upon:
 "
@@ -63,6 +64,7 @@ let s:default_config = {
     \ 'keymap_accept_full': "<Tab>",
     \ 'keymap_accept_line': "<S-Tab>",
     \ 'keymap_accept_word': "<C-B>",
+    \ 'enable_at_startup':  v:true,
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -132,6 +134,9 @@ function! llama#disable()
     call llama#fim_hide()
     autocmd! llama
     exe "silent! iunmap " .. g:llama_config.keymap_trigger
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_full
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_line
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_word
     let s:llama_enabled = v:false
 endfunction
 
@@ -139,12 +144,12 @@ function! llama#toggle()
     if s:llama_enabled
         call llama#disable()
     else
-        call llama#init()
+        call llama#enable()
     endif
 endfunction
 
-function llama#setup_commands()
-    command! LlamaEnable  call llama#init()
+function! llama#setup_commands()
+    command! LlamaEnable  call llama#enable()
     command! LlamaDisable call llama#disable()
     command! LlamaToggle  call llama#toggle()
 endfunction
@@ -190,6 +195,16 @@ function! llama#init()
         if empty(prop_type_get(s:hlgroup_info))
             call prop_type_add(s:hlgroup_info, {'highlight': s:hlgroup_info})
         endif
+    endif
+
+    if g:llama_config.enable_at_startup
+        call llama#enable()
+    endif
+endfunction
+
+function! llama#enable()
+    if s:llama_enabled
+        return
     endif
 
     augroup llama
