@@ -74,16 +74,38 @@ let s:llama_enabled = v:false
 " used to avoid re-computing the same completions and to also create new completions with similar context
 " ref: https://github.com/ggml-org/llama.vim/pull/18
 let g:cache_data = {}
+let g:cache_lru_order = []
 
-" TODO: Currently the cache uses a random eviction policy. A more clever policy could be implemented (eg. LRU).
 function! s:cache_insert(key, value)
+    " Check if we need to evict an entry
     if len(keys(g:cache_data)) > (g:llama_config.max_cache_keys - 1)
-        let l:keys = keys(g:cache_data)
-        let l:hash = l:keys[rand() % len(l:keys)]
-        call remove(g:cache_data, l:hash)
+        " Get the least recently used key (first in order list)
+        let l:lru_key = g:cache_lru_order[0]
+        " Remove from cache data
+        call remove(g:cache_data, l:lru_key)
+        " Remove from LRU order
+        call remove(g:cache_lru_order, 0)
     endif
 
+    " Update the cache
     let g:cache_data[a:key] = a:value
+    
+    " Update LRU order - remove key if it exists and add to end (most recent)
+    call filter(g:cache_lru_order, 'v:val !=# a:key')
+    call add(g:cache_lru_order, a:key)
+endfunction
+
+" Helper function to get cache value and update LRU order
+function! s:cache_get(key)
+    if !has_key(g:cache_data, a:key)
+        return v:null
+    endif
+    
+    " Update LRU order - remove key if it exists and add to end (most recent)
+    call filter(g:cache_lru_order, 'v:val !=# a:key')
+    call add(g:cache_lru_order, a:key)
+    
+    return g:cache_data[a:key]
 endfunction
 
 " get the number of leading spaces of a string
@@ -91,7 +113,9 @@ function! s:get_indent(str)
     let l:count = 0
     for i in range(len(a:str))
         if a:str[i] == "\t"
-            let l:count += &tabstop - 1
+            let l:count += &tabstop
+        elseif a:str[i] == " "
+            let l:count += 1
         else
             break
         endif
@@ -547,7 +571,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     " if we already have a cached completion for one of the hashes, don't send a request
     if a:use_cache
         for l:hash in l:hashes
-            if get(g:cache_data, l:hash, v:null) != v:null
+            if s:cache_get(l:hash) != v:null
                 return
             endif
         endfor
@@ -566,12 +590,12 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
 
     " evict chunks that are very similar to the current context
     " this is needed because such chunks usually distort the completion to repeat what was already there
-    for i in range(len(s:ring_chunks) - 1, 0, -1)
-        if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
-            call remove(s:ring_chunks, i)
-            let s:ring_n_evict += 1
-        endif
-    endfor
+    "for i in range(len(s:ring_chunks) - 1, 0, -1)
+    "    if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
+    "        call remove(s:ring_chunks, i)
+    "        let s:ring_n_evict += 1
+    "    endif
+    "endfor
 
     " prepare the extra context data
     let l:extra_ctx = []
@@ -748,8 +772,8 @@ function! s:fim_try_hint(pos_x, pos_y)
 
     let l:hash = sha256(l:prefix . l:middle . 'Î' . l:suffix)
 
-    " Check if the completion is cached
-    let l:raw = get(g:cache_data, l:hash, v:null)
+    " Check if the completion is cached (and update LRU order)
+    let l:raw = s:cache_get(l:hash)
 
     " ... or if there is a cached completion nearby (10 characters behind)
     " Looks at the previous 10 characters to see if a completion is cached. If one is found at (x,y)
@@ -763,8 +787,8 @@ function! s:fim_try_hint(pos_x, pos_y)
             let l:ctx_new = l:pm[:-(2 + i)] . 'Î' . l:suffix
 
             let l:hash_new = sha256(l:ctx_new)
-            if has_key(g:cache_data, l:hash_new)
-                let l:response_cached = get(g:cache_data, l:hash_new)
+            let l:response_cached = s:cache_get(l:hash_new)
+            if l:response_cached != v:null
                 if l:response_cached == ""
                     continue
                 endif
