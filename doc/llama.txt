@@ -104,6 +104,7 @@ Currently the default config is:
 		    \ 'keymap_accept_full': "<Tab>",
 		    \ 'keymap_accept_line': "<S-Tab>",
 		    \ 'keymap_accept_word': "<C-B>",
+		    \ 'enable_at_startup':  v:true,
 		    \ }
 <
 
@@ -138,6 +139,8 @@ Currently the default config is:
 
 - {max_cache_keys}		max number of cached completions to keep in result_cache
 
+- {enable_at_startup}	whether to enable llama.vim functionality at startup
+						(v:true to enable, v:false to disable; default: v:true)
 
 parameters for the ring-buffer with extra context:
 
@@ -186,6 +189,7 @@ Example:
 					n_suffix= 1024,
 					auto_fim = false,
 					keymap_accept_full = "<C-S>",
+					enable_at_startup = false,
 				}
 			end,
 		}
@@ -201,6 +205,7 @@ Example:
 					auto_fim = false,
 					keymap_accept_full = "<C-S>",
 					stop_strings = { "\n" },
+					enable_at_startup = false,
 				}
 			end,
 		}
