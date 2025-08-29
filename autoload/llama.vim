@@ -7,6 +7,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint:         llama.cpp server endpoint
 "   api_key:          llama.cpp server api key (optional)
+"   model:            model name in case when multiple models are loaded (optional)
 "   n_prefix:         number of lines before the cursor location to include in the local prefix
 "   n_suffix:         number of lines after  the cursor location to include in the local suffix
 "   n_predict:        max number of tokens to predict
@@ -46,6 +47,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 let s:default_config = {
     \ 'endpoint':           'http://127.0.0.1:8012/infill',
     \ 'api_key':            '',
+    \ 'model':              '',
     \ 'n_prefix':           256,
     \ 'n_suffix':           64,
     \ 'n_predict':          128,
@@ -385,7 +387,7 @@ function! s:ring_update()
     endfor
 
     " no samplers needed here
-    let l:request = json_encode({
+    let l:request = {
         \ 'input_prefix':     "",
         \ 'input_suffix':     "",
         \ 'input_extra':      l:extra_context,
@@ -398,7 +400,7 @@ function! s:ring_update()
         \ 't_max_prompt_ms':  1,
         \ 't_max_predict_ms': 1,
         \ 'response_fields':  [""]
-        \ })
+        \ }
 
     let l:curl_command = [
         \ "curl",
@@ -410,19 +412,24 @@ function! s:ring_update()
         \ "--data", "@-",
         \ ]
 
+    if exists ("g:llama_config.model") && len("g:llama_config.model") > 0
+        let l:request['model'] = g:llama_config.model
+    end
+
     if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
 
     " no callbacks because we don't need to process the response
+    let l:request_json = json_encode(l:request)
     if s:ghost_text_nvim
         let jobid = jobstart(l:curl_command, {})
-        call chansend(jobid, l:request)
+        call chansend(jobid, l:request_json)
         call chanclose(jobid, 'stdin')
     elseif s:ghost_text_vim
         let jobid = job_start(l:curl_command, {})
         let channel = job_getchannel(jobid)
-        call ch_sendraw(channel, l:request)
+        call ch_sendraw(channel, l:request_json)
         call ch_close_in(channel)
     endif
 endfunction
@@ -622,7 +629,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
             \ })
     endfor
 
-    let l:request = json_encode({
+    let l:request = {
         \ 'input_prefix':     l:prefix,
         \ 'input_suffix':     l:suffix,
         \ 'input_extra':      l:extra_ctx,
@@ -650,7 +657,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \                       "truncated",
         \                       "tokens_cached",
         \                     ],
-        \ })
+        \ }
 
     let l:curl_command = [
         \ "curl",
@@ -661,6 +668,10 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ "--header", "Content-Type: application/json",
         \ "--data", "@-",
         \ ]
+
+    if exists ("g:llama_config.model") && len("g:llama_config.model") > 0
+        let l:request['model'] = g:llama_config.model
+    end
 
     if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
@@ -675,13 +686,14 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     endif
 
     " send the request asynchronously
+    let l:request_json = json_encode(l:request)
     if s:ghost_text_nvim
         let s:current_job = jobstart(l:curl_command, {
             \ 'on_stdout': function('s:fim_on_response', [l:hashes]),
             \ 'on_exit':   function('s:fim_on_exit'),
             \ 'stdout_buffered': v:true
             \ })
-        call chansend(s:current_job, l:request)
+        call chansend(s:current_job, l:request_json)
         call chanclose(s:current_job, 'stdin')
     elseif s:ghost_text_vim
         let s:current_job = job_start(l:curl_command, {
@@ -690,7 +702,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
             \ })
 
         let channel = job_getchannel(s:current_job)
-        call ch_sendraw(channel, l:request)
+        call ch_sendraw(channel, l:request_json)
         call ch_close_in(channel)
     endif
 
