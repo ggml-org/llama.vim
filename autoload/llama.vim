@@ -406,6 +406,7 @@ function! s:ring_update()
         \ "curl",
         \ "--silent",
         \ "--no-buffer",
+        \ "--include",
         \ "--request", "POST",
         \ "--url", g:llama_config.endpoint,
         \ "--header", "Content-Type: application/json",
@@ -663,6 +664,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ "curl",
         \ "--silent",
         \ "--no-buffer",
+        \ "--include",
         \ "--request", "POST",
         \ "--url", g:llama_config.endpoint,
         \ "--header", "Content-Type: application/json",
@@ -738,19 +740,31 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         return
     endif
 
+    let l:http_resp = s:curl_stdout_to_response(l:raw)
+
+    if l:http_resp['code'] >= 400
+        echohl WarningMsg
+        echo "HTTP error: " . l:http_resp['code'] . " " . l:http_resp['message']
+        echohl None
+        echon l:http_resp['body']
+        return
+    endif
+
+    let l:body = l:http_resp['body']
+
     " ensure the response is valid JSON, starting with a fast check before full decode
-    if l:raw !~# '^\s*{' || l:raw !~# '\v"content"\s*:"'
+    if l:body !~# '^\s*{' || l:body !~# '\v"content"\s*:"'
         return
     endif
     try
-        let l:response = json_decode(l:raw)
+        let l:response = json_decode(l:body)
     catch
         return
     endtry
 
     " put the response in the cache
     for l:hash in a:hashes
-        call s:cache_insert(l:hash, l:raw)
+        call s:cache_insert(l:hash, l:body)
     endfor
 
     " if nothing is currently displayed - show the hint directly
@@ -769,6 +783,52 @@ function! s:fim_on_exit(job_id, exit_code, event = v:null)
 
     let s:current_job = v:null
 endfunction
+
+" converts curl output to response struct
+"
+" Example intput:
+"   HTTP/1.1 200 OK
+"   Access-Control-Allow-Origin:
+"   Content-Length: 906
+"   Content-Type: application/json; charset=utf-8
+"   Keep-Alive: timeout=5, max=100
+"   Server: llama.cpp
+"   Date: Fri, 29 Aug 2025 16:03:46 GMT
+"
+"   {"choices":[{"finish_reason":"stop", ....
+" 
+" Result:
+"   status -  'HTTP/1.1 200 OK'
+"   message - 'OK'
+"   code -     200 
+"   headers -  ['Access-Control-Allow-Origin:', ....]
+"   body    -  '{["choices":.....'
+function! s:curl_stdout_to_response(raw)
+    let l:parts = split(a:raw, "\r\n\r\n")
+    if len(l:parts) < 2
+        throw "curl output missing head part, use --include flag to fix this"
+    end
+
+    let l:head = remove(l:parts, 0)
+    let l:body = join(l:parts, "\r\n\r\n")
+
+    let l:headers = split(l:head, "\r\n")
+    let l:status = remove(l:headers, 0)
+
+    let l:status_parts = split(l:status, ' ')
+    let l:http_ver = remove(l:status_parts, 0)
+    let l:code = remove(l:status_parts, 0)
+    let l:message = join(l:status_parts, ' ')
+
+    return {
+          \ 'status':      l:status,
+          \ 'message':     l:message,
+          \ 'code':        str2nr(l:code),
+          \ 'headers':     l:headers,
+          \ 'body':        l:body,
+          \ }
+  endfunction
+
 
 function! s:on_move()
     let s:t_last_move = reltime()
