@@ -86,6 +86,7 @@ Currently the default config is:
 		let s:default_config = {
 		    \ 'endpoint':           'http://127.0.0.1:8012/infill',
 		    \ 'api_key':            '',
+		    \ 'model':              '',
 		    \ 'n_prefix':           256,
 		    \ 'n_suffix':           64,
 		    \ 'n_predict':          128,
@@ -111,6 +112,9 @@ Currently the default config is:
 - {endpoint}			llama.cpp server endpoint
 
 - {api_key}				llama.cpp server api key (optional)
+
+- {model}				model name in case if multiple models are
+						loaded (optional)
 
 - {n_prefix}			number of lines before the cursor location to include
 						in the local prefix
