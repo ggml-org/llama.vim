@@ -1021,31 +1021,30 @@ function! s:fim_render(pos_x, pos_y, data)
 
     " display the suggestion and append the info to the end of the first line
     if s:ghost_text_nvim
+        let l:first_line_text = [[l:content[0], 'llama_hl_hint']]
+        if len(l:content) > 1
+            call add(l:first_line_text, [' ...', 'llama_hl_hint'])
+        endif
+        if !empty(l:info)
+            call add(l:first_line_text, [l:info, 'llama_hl_info'])
+        endif
+        
         call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, l:pos_x, {
-            \ 'virt_text': [[l:content[0], 'llama_hl_hint'], [l:info, 'llama_hl_info']],
+            \ 'virt_text': l:first_line_text,
             \ 'virt_text_pos': l:content == [""] ? 'eol' : 'overlay'
-            \ })
-
-        call nvim_buf_set_extmark(l:bufnr, l:id_vt_fim, l:pos_y - 1, 0, {
-            \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_hint']]})
             \ })
     elseif s:ghost_text_vim
         let l:full_suffix = l:content[0]
         if !empty(l:full_suffix)
             let l:new_suffix = l:full_suffix[0:-len(l:line_cur[l:pos_x:])-1]
+            if len(l:content) > 1
+                let l:new_suffix .= ' ...'
+            endif
             call prop_add(l:pos_y, l:pos_x + 1, {
                 \ 'type': s:hlgroup_hint,
                 \ 'text': l:new_suffix
                 \ })
         endif
-        for line in l:content[1:]
-            call prop_add(l:pos_y, 0, {
-                \ 'type': s:hlgroup_hint,
-                \ 'text': line,
-                \ 'text_padding_left': s:get_indent(line),
-                \ 'text_align': 'below'
-                \ })
-        endfor
         if !empty(l:info)
             call prop_add(l:pos_y, 0, {
                 \ 'type': s:hlgroup_info,
