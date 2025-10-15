@@ -1139,3 +1139,7 @@ function! llama#fim_hide()
     exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_line
     exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_word
 endfunction
+
+function! llama#is_hint_shown()
+    return s:hint_shown
+endfunction
