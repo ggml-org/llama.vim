@@ -890,12 +890,12 @@ function! s:fim_render(pos_x, pos_y, data)
         if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
             \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
             let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
-            let l:t_prompt_ms = get(l:response, 'timings/prompt_ms', 1)
-            let l:s_prompt    = get(l:response, 'timings/prompt_per_second', 0)
+            let l:t_prompt_ms = str2float(get(l:response, 'timings/prompt_ms', '1.0'))
+            let l:s_prompt    = str2float(get(l:response, 'timings/prompt_per_second', '0.0'))
 
             let l:n_predict    = get(l:response, 'timings/predicted_n', 0)
-            let l:t_predict_ms = get(l:response, 'timings/predicted_ms', 1)
-            let l:s_predict    = get(l:response, 'timings/predicted_per_second', 0)
+            let l:t_predict_ms = str2float(get(l:response, 'timings/predicted_ms', '1.0'))
+            let l:s_predict    = str2float(get(l:response, 'timings/predicted_per_second', '0.0'))
         endif
 
         let l:has_info = v:true
