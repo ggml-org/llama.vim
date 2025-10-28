@@ -39,6 +39,10 @@ Commands
 		Toggle the related autocommands and keymap for this vim/nvim session
 		Equivalent to vimscript function: `llama#toggle()`
 
+*:LlamaToggleAutoFim*
+
+		Toggle autofim for this vim/nvim session
+		Equivalent to vimscript function: `llama#toggle_auto_fim()`
 
 ================================================================================
 How to start the server

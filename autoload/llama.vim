@@ -93,7 +93,7 @@ function! s:cache_insert(key, value)
 
     " Update the cache
     let g:cache_data[a:key] = a:value
-    
+
     " Update LRU order - remove key if it exists and add to end (most recent)
     call filter(g:cache_lru_order, 'v:val !=# a:key')
     call add(g:cache_lru_order, a:key)
@@ -104,11 +104,11 @@ function! s:cache_get(key)
     if !has_key(g:cache_data, a:key)
         return v:null
     endif
-    
+
     " Update LRU order - remove key if it exists and add to end (most recent)
     call filter(g:cache_lru_order, 'v:val !=# a:key')
     call add(g:cache_lru_order, a:key)
-    
+
     return g:cache_data[a:key]
 endfunction
 
@@ -150,10 +150,19 @@ function! llama#toggle()
     endif
 endfunction
 
+function! llama#toggle_auto_fim()
+    if !s:llama_enabled
+        return
+    endif
+    let g:llama_config.auto_fim = !g:llama_config.auto_fim
+    call llama#setup_autocmds()
+endfunction
+
 function! llama#setup_commands()
     command! LlamaEnable  call llama#enable()
     command! LlamaDisable call llama#disable()
     command! LlamaToggle  call llama#toggle()
+    command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
 endfunction
 
 function! llama#init()
@@ -204,23 +213,19 @@ function! llama#init()
     endif
 endfunction
 
-function! llama#enable()
-    if s:llama_enabled
-        return
-    endif
-
+function! llama#setup_autocmds()
     augroup llama
         autocmd!
         exe "autocmd InsertEnter * inoremap <expr> <silent> " .. g:llama_config.keymap_trigger .. " llama#fim_inline(v:false, v:false)"
         autocmd InsertLeavePre  * call llama#fim_hide()
 
-        autocmd CursorMoved     * call s:on_move()
-        autocmd CursorMovedI    * call s:on_move()
-
         autocmd CompleteChanged * call llama#fim_hide()
         autocmd CompleteDone    * call s:on_move()
 
         if g:llama_config.auto_fim
+            autocmd CursorMoved     * call s:on_move()
+            autocmd CursorMovedI    * call s:on_move()
+
             autocmd CursorMovedI * call llama#fim(-1, -1, v:true, [], v:true)
         endif
 
@@ -234,6 +239,15 @@ function! llama#enable()
         " gather chunk upon saving the file
         autocmd BufWritePost    * call s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
     augroup END
+
+endfunction
+
+function! llama#enable()
+    if s:llama_enabled
+        return
+    endif
+
+    call llama#setup_autocmds()
 
     silent! call llama#fim_hide()
 
