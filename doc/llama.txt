@@ -105,6 +105,7 @@ Currently the default config is:
 		    \ 'ring_chunk_size':    64,
 		    \ 'ring_scope':         1024,
 		    \ 'ring_update_ms':     1000,
+		    \ 'delay':              100,
 		    \ 'keymap_trigger':     "<C-F>",
 		    \ 'keymap_accept_full': "<Tab>",
 		    \ 'keymap_accept_line': "<S-Tab>",
@@ -164,6 +165,8 @@ parameters for the ring-buffer with extra context:
 						lines) for gathering chunks after FIM
 
 - {ring_update_ms}		how often to process queued chunks in normal mode
+
+- {delay}				debounce delay in ms for auto-trigger
 
 keymaps parameters:
 

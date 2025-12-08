@@ -36,6 +36,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "                           at ring_n_chunks = 64 and ring_chunk_size = 64 you need ~32k context
 "   ring_scope:       the range around the cursor position (in number of lines) for gathering chunks after FIM
 "   ring_update_ms:   how often to process queued chunks in normal mode
+"   delay:            debounce delay in ms for auto-trigger
 "
 " keymaps parameters:
 "
@@ -62,6 +63,7 @@ let s:default_config = {
     \ 'ring_chunk_size':    64,
     \ 'ring_scope':         1024,
     \ 'ring_update_ms':     1000,
+    \ 'delay':              100,
     \ 'keymap_trigger':     "<C-F>",
     \ 'keymap_accept_full': "<Tab>",
     \ 'keymap_accept_line': "<S-Tab>",
@@ -186,6 +188,7 @@ function! llama#init()
     let s:indent_last = -1   " last indentation level that was accepted (TODO: this might be buggy)
 
     let s:timer_fim = -1
+    let s:timer_debounce = -1
     let s:t_last_move = reltime() " last time the cursor moved
 
     let s:current_job = v:null
@@ -541,6 +544,19 @@ endfunction
 " the main FIM call
 " takes local context around the cursor and sends it together with the extra context to the server for completion
 function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
+    if a:is_auto && empty(a:prev) && g:llama_config.delay > 0
+        if s:timer_debounce != -1
+            call timer_stop(s:timer_debounce)
+        endif
+
+        let s:timer_debounce = timer_start(g:llama_config.delay, {-> s:fim_exec(a:pos_x, a:pos_y, a:is_auto, a:prev, a:use_cache)})
+        return
+    endif
+
+    call s:fim_exec(a:pos_x, a:pos_y, a:is_auto, a:prev, a:use_cache)
+endfunction
+
+function! s:fim_exec(pos_x, pos_y, is_auto, prev, use_cache) abort
     let l:pos_x = a:pos_x
     let l:pos_y = a:pos_y
 
@@ -554,13 +570,12 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
 
     " avoid sending repeated requests too fast
     if s:current_job != v:null
-        if s:timer_fim != -1
-            call timer_stop(s:timer_fim)
-            let s:timer_fim = -1
+        if s:ghost_text_nvim
+            call jobstop(s:current_job)
+        elseif s:ghost_text_vim
+            call job_stop(s:current_job)
         endif
-
-        let s:timer_fim = timer_start(100, {-> llama#fim(a:pos_x, a:pos_y, v:true, a:prev, a:use_cache)})
-        return
+        let s:current_job = v:null
     endif
 
     "if s:hint_shown && empty(a:prev)
@@ -691,14 +706,6 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
 
-    if s:current_job != v:null
-        if s:ghost_text_nvim
-            call jobstop(s:current_job)
-        elseif s:ghost_text_vim
-            call job_stop(s:current_job)
-        endif
-    endif
-
     " send the request asynchronously
     let l:request_json = json_encode(l:request)
     if s:ghost_text_nvim
@@ -777,11 +784,15 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
 endfunction
 
 function! s:fim_on_exit(job_id, exit_code, event = v:null)
-    if a:exit_code != 0
-        echom "Job failed with exit code: " . a:exit_code
+    if a:job_id != s:current_job
+        return
     endif
 
     let s:current_job = v:null
+
+    if a:exit_code != 0
+        echom "Job failed with exit code: " . a:exit_code
+    endif
 endfunction
 
 function! s:on_move()
