@@ -402,6 +402,7 @@ function! s:ring_update()
 
     " no samplers needed here
     let l:request = {
+        \ 'id_slot':          0,
         \ 'input_prefix':     "",
         \ 'input_suffix':     "",
         \ 'input_extra':      l:extra_context,
@@ -644,6 +645,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     endfor
 
     let l:request = {
+        \ 'id_slot':          0,
         \ 'input_prefix':     l:prefix,
         \ 'input_suffix':     l:suffix,
         \ 'input_extra':      l:extra_ctx,
