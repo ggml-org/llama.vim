@@ -158,10 +158,10 @@ function! llama#toggle_auto_fim()
     call llama#setup_autocmds()
 endfunction
 
-function! llama#setup_commands()
-    command! LlamaEnable  call llama#enable()
-    command! LlamaDisable call llama#disable()
-    command! LlamaToggle  call llama#toggle()
+function! llama#setup()
+    command! LlamaEnable         call llama#enable()
+    command! LlamaDisable        call llama#disable()
+    command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
 endfunction
 
@@ -173,7 +173,7 @@ function! llama#init()
         return
     endif
 
-    call llama#setup_commands()
+    call llama#setup()
 
     let s:fim_data = {}
 
