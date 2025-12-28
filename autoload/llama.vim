@@ -43,6 +43,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "   keymap_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_debug:       keymap to toggle the debug pane,  default: <C-D>
 "
 let s:default_config = {
     \ 'endpoint':           'http://127.0.0.1:8012/infill',
@@ -66,6 +67,7 @@ let s:default_config = {
     \ 'keymap_accept_full': "<Tab>",
     \ 'keymap_accept_line': "<S-Tab>",
     \ 'keymap_accept_word': "<C-B>",
+    \ 'keymap_debug':       "<C-D>",
     \ 'enable_at_startup':  v:true,
     \ }
 
@@ -134,11 +136,17 @@ endfunction
 
 function! llama#disable()
     call llama#fim_hide()
+
     autocmd! llama
-    exe "silent! iunmap " .. g:llama_config.keymap_trigger
+
+    " TODO: these unmaps don't seem to work properly
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_trigger
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_full
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_line
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_word
+
+    exe "silent!  unmap          " .. g:llama_config.keymap_debug
+
     let s:llama_enabled = v:false
 
     call llama#debug_log('plugin disabled')
@@ -156,7 +164,9 @@ function! llama#toggle_auto_fim()
     if !s:llama_enabled
         return
     endif
+
     let g:llama_config.auto_fim = !g:llama_config.auto_fim
+
     call llama#setup_autocmds()
 endfunction
 
@@ -222,7 +232,6 @@ endfunction
 function! llama#setup_autocmds()
     augroup llama
         autocmd!
-        exe "autocmd InsertEnter * inoremap <expr> <silent> " .. g:llama_config.keymap_trigger .. " llama#fim_inline(v:false, v:false)"
         autocmd InsertLeavePre  * call llama#fim_hide()
 
         autocmd CompleteChanged * call llama#fim_hide()
@@ -245,13 +254,16 @@ function! llama#setup_autocmds()
         " gather chunk upon saving the file
         autocmd BufWritePost    * call s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
     augroup END
-
 endfunction
 
 function! llama#enable()
     if s:llama_enabled
         return
     endif
+
+    " setup keymaps
+    exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_trigger . " llama#fim_inline(v:false, v:false)"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_debug .. " :call llama#debug_toggle()<CR>"
 
     call llama#setup_autocmds()
 
@@ -536,6 +548,11 @@ endfunction
 
 " necessary for 'inoremap <expr>'
 function! llama#fim_inline(is_auto, use_cache) abort
+    " exit if not enabled
+    if !s:llama_enabled
+        return ''
+    endif
+
     " we already have a suggestion displayed - hide it
     if s:hint_shown && !a:is_auto
         call llama#fim_hide()
