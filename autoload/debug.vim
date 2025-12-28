@@ -26,8 +26,15 @@ function! debug#log(msg, ...) abort
 
     if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
         call setbufvar    (s:debug_bufnr, '&modifiable', 1)
-        call deletebufline(s:debug_bufnr, 1, '$')
-        call setbufline   (s:debug_bufnr, 1, s:debug_log)
+        call appendbufline(s:debug_bufnr, 0, l:block)
+
+        " Determine the window that shows the debug buffer (if any)
+        let l:winid = bufwinid(s:debug_bufnr)
+        if l:winid > 0
+            call win_execute(l:winid, 'normal! gg')
+            call win_execute(l:winid, 'normal! zM')
+        endif
+
         call setbufvar    (s:debug_bufnr, '&modifiable', 0)
     endif
 endfunction
