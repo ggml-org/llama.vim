@@ -9,23 +9,26 @@ function! debug#log(msg, ...) abort
     let l:timestamp = strftime('%H:%M:%S')
     let l:header    = l:timestamp . ' | ' . a:msg
 
+    let l:block = []
     if a:0 >= 1
-        " If extra data is supplied, wrap it in fold markers
         let l:details = type(a:1) == type([]) ? a:1 : split(a:1, "\n")
-        call add(s:debug_log, l:header . ' {{{')
+
+        call add(l:block, l:header . ' {{{')
         for l:line in l:details
-            call add(s:debug_log, l:line)
+            call add(l:block, l:line)
         endfor
-        call add(s:debug_log, '}}}')
+        call add(l:block, '}}}')
     else
-        " Simple one‑liner – no fold
-        call add(s:debug_log, l:header)
+        call add(l:block, l:header)
     endif
 
+    let s:debug_log = l:block + s:debug_log
+
     if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
-        call setbufvar(s:debug_bufnr, '&modifiable', 1)
-        call setbufline(s:debug_bufnr, 1, s:debug_log)
-        call setbufvar(s:debug_bufnr, '&modifiable', 0)
+        call setbufvar    (s:debug_bufnr, '&modifiable', 1)
+        call deletebufline(s:debug_bufnr, 1, '$')
+        call setbufline   (s:debug_bufnr, 1, s:debug_log)
+        call setbufvar    (s:debug_bufnr, '&modifiable', 0)
     endif
 endfunction
 
@@ -60,25 +63,24 @@ function! debug#toggle() abort
 
     " Populate with existing logs (or refresh if already present)
     if !empty(s:debug_log)
-        call setbufvar(s:debug_bufnr, '&modifiable', 1)
-        call setbufline(s:debug_bufnr, 1, s:debug_log)
-        call setbufvar(s:debug_bufnr, '&modifiable', 0)
+        call setbufvar    (s:debug_bufnr, '&modifiable', 1)
+        call deletebufline(s:debug_bufnr, 1, '$')
+        call setbufline   (s:debug_bufnr, 1, s:debug_log)
+        call setbufvar    (s:debug_bufnr, '&modifiable', 0)
     endif
 endfunction
 
 function! debug#clear() abort
     let s:debug_log = []
     if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
-        call setbufvar(s:debug_bufnr, '&modifiable', 1)
-        %delete _
-        call setbufvar(s:debug_bufnr, '&modifiable', 0)
+        call setbufvar    (s:debug_bufnr, '&modifiable', 1)
+        call deletebufline(s:debug_bufnr, 1, '$')
+        call setbufvar    (s:debug_bufnr, '&modifiable', 0)
     endif
 endfunction
 
 function! debug#setup() abort
     call debug#log('Debug pane initialized')
 
-    command! LlamaDebugClear     call debug#clear()
-    command! LlamaDebugFoldOpen  execute bufwinnr(s:debug_bufnr) . 'wincmd w' | normal! zR
-    command! LlamaDebugFoldClose execute bufwinnr(s:debug_bufnr) . 'wincmd w' | normal! zM
+    command! LlamaDebugClear call debug#clear()
 endfunction
