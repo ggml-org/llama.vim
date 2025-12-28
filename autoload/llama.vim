@@ -140,6 +140,8 @@ function! llama#disable()
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_line
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_word
     let s:llama_enabled = v:false
+
+    call llama#debug_log('plugin disabled')
 endfunction
 
 function! llama#toggle()
@@ -163,9 +165,15 @@ function! llama#setup()
     command! LlamaDisable        call llama#disable()
     command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
+
+    command! LlamaDebugClear     call    llama#debug_clear()
+    command! LlamaDebugFoldOpen  execute bufwinnr(s:debug_bufnr) . 'wincmd w' | normal! zR
+    command! LlamaDebugFoldClose execute bufwinnr(s:debug_bufnr) . 'wincmd w' | normal! zM
 endfunction
 
 function! llama#init()
+    call llama#debug_log('llama.vim initializing ...')
+
     if !executable('curl')
         echohl WarningMsg
         echo 'llama.vim requires the "curl" command to be available'
@@ -257,6 +265,8 @@ function! llama#enable()
     endif
 
     let s:llama_enabled = v:true
+
+    call llama#debug_log('plugin enabled')
 endfunction
 
 " compute how similar two chunks of text are
@@ -769,6 +779,9 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         call s:cache_insert(l:hash, l:raw)
     endfor
 
+    " Log the received response (full JSON) for debugging
+    call llama#debug_log('received fim response', l:raw)
+
     " if nothing is currently displayed - show the hint directly
     if !s:hint_shown || !s:fim_data['can_accept']
         let l:pos_x = col('.') - 1
@@ -1158,4 +1171,82 @@ endfunction
 
 function! llama#is_hint_shown()
     return s:hint_shown
+endfunction
+
+" ----------------------------------------------------------------------
+" Debug pane state – script‑local variables used by the foldable log pane
+" ----------------------------------------------------------------------
+let s:debug_log   = []   " List of raw log lines (including fold markers)
+let s:debug_bufnr = -1   " Buffer number of the debug pane (‑1 means none yet)
+
+function! llama#debug_log(msg, ...) abort
+    " Create a timestamped header
+    let l:timestamp = strftime('%H:%M:%S')
+    let l:header    = l:timestamp . ' | ' . a:msg
+
+    if a:0 >= 1
+        " If extra data is supplied, wrap it in fold markers
+        let l:details = type(a:1) == type([]) ? a:1 : split(a:1, "\n")
+
+        call add(s:debug_log, l:header . ' {{{')
+        for l:line in l:details
+            call add(s:debug_log, l:line)
+        endfor
+        call add(s:debug_log, '}}}')
+    else
+        " Simple one‑liner – no fold
+        call add(s:debug_log, l:header)
+    endif
+
+    if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
+        call setbufvar (s:debug_bufnr, '&modifiable', 1)
+        call setbufline(s:debug_bufnr, 1, s:debug_log)
+        call setbufvar (s:debug_bufnr, '&modifiable', 0)
+    endif
+endfunction
+
+function! llama#debug_toggle() abort
+    " If the pane is visible, close it
+    if s:debug_bufnr > 0 && bufexists(s:debug_bufnr) && bufwinnr(s:debug_bufnr) != -1
+        execute bufwinnr(s:debug_bufnr) . 'close'
+        return
+    endif
+
+    " Otherwise open (or re‑open) the debug pane in a bottom split
+    if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
+        " The buffer already exists – open it in a split without creating a new one
+        execute 'botright sbuffer ' . s:debug_bufnr
+    else
+        " Create a fresh scratch buffer for the debug pane
+        botright new
+        setlocal buftype=nofile bufhidden=hide noswapfile
+        setlocal nomodifiable
+        setlocal nospell nowrap nonumber norelativenumber signcolumn=no
+        file [Llama‑Debug]
+
+        " Enable marker folding
+        setlocal foldmethod=marker
+        setlocal foldmarker={{{,}}}
+        setlocal foldlevel=0 " start with all folds closed
+        setlocal foldenable
+        setlocal foldcolumn=2
+
+        let s:debug_bufnr = bufnr('%')
+    endif
+
+    " Populate with existing logs (or refresh if already present)
+    if !empty(s:debug_log)
+        call setbufvar (s:debug_bufnr, '&modifiable', 1)
+        call setbufline(s:debug_bufnr, 1, s:debug_log)
+        call setbufvar (s:debug_bufnr, '&modifiable', 0)
+    endif
+endfunction
+
+function! llama#debug_clear() abort
+    let s:debug_log = []
+    if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
+        call setbufvar(s:debug_bufnr, '&modifiable', 1)
+        %delete _
+        call setbufvar(s:debug_bufnr, '&modifiable', 0)
+    endif
 endfunction
