@@ -5,13 +5,14 @@ let s:debug_log   = []   " List of raw log lines (including fold markers)
 let s:debug_bufnr = -1   " Buffer number of the debug pane (-1 means none yet)
 
 function! debug#log(msg, ...) abort
-    " Create a timestamped header
     let l:timestamp = strftime('%H:%M:%S')
     let l:header    = l:timestamp . ' | ' . a:msg
 
     let l:block = []
     if a:0 >= 1
         let l:details = type(a:1) == type([]) ? a:1 : split(a:1, "\n")
+
+        let l:header = l:header . ' | ' . get(l:details, 0, '')
 
         call add(l:block, l:header . ' {{{')
         for l:line in l:details
@@ -24,11 +25,16 @@ function! debug#log(msg, ...) abort
 
     let s:debug_log = l:block + s:debug_log
 
+    let l:max_logs = 1024
+    if len(s:debug_log) > l:max_logs
+        let s:debug_log = s:debug_log[:l:max_logs - 1]
+    endif
+
     if s:debug_bufnr > 0 && bufexists(s:debug_bufnr)
         call setbufvar    (s:debug_bufnr, '&modifiable', 1)
-        call appendbufline(s:debug_bufnr, 0, l:block)
+        call deletebufline(s:debug_bufnr, 1, '$')
+        call setbufline   (s:debug_bufnr, 1, s:debug_log)
 
-        " Determine the window that shows the debug buffer (if any)
         let l:winid = bufwinid(s:debug_bufnr)
         if l:winid > 0
             call win_execute(l:winid, 'normal! gg')
@@ -56,7 +62,7 @@ function! debug#toggle() abort
         setlocal buftype=nofile bufhidden=hide noswapfile
         setlocal nomodifiable
         setlocal nospell nowrap nonumber norelativenumber signcolumn=no
-        file [Llama‑Debug]
+        file [llama.vim-debug]
 
         " Enable marker folding
         setlocal foldmethod=marker

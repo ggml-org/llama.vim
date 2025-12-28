@@ -794,8 +794,7 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         call s:cache_insert(l:hash, l:raw)
     endfor
 
-    " Log the received response (full JSON) for debugging
-    call llama#debug_log('received fim response', l:raw)
+    call llama#debug_log('received fim response', get(json_decode(l:raw), 'content', ''))
 
     " if nothing is currently displayed - show the hint directly
     if !s:hint_shown || !s:fim_data['can_accept']
