@@ -34,14 +34,13 @@ function! debug#log(msg, ...) abort
         call setbufvar    (s:debug_bufnr, '&modifiable', 1)
         call deletebufline(s:debug_bufnr, 1, '$')
         call setbufline   (s:debug_bufnr, 1, s:debug_log)
+        call setbufvar    (s:debug_bufnr, '&modifiable', 0)
 
         let l:winid = bufwinid(s:debug_bufnr)
         if l:winid > 0
             call win_execute(l:winid, 'normal! gg')
-            call win_execute(l:winid, 'normal! zM')
+            call win_execute(l:winid, 'normal! zx')
         endif
-
-        call setbufvar    (s:debug_bufnr, '&modifiable', 0)
     endif
 endfunction
 
