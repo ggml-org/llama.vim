@@ -794,10 +794,11 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         call s:cache_insert(l:hash, l:raw)
     endfor
 
-    call llama#debug_log('received fim response', get(json_decode(l:raw), 'content', ''))
-
     " if nothing is currently displayed - show the hint directly
     if !s:hint_shown || !s:fim_data['can_accept']
+        " log only non-speculative fims for now
+        call llama#debug_log('fim_on_response', get(json_decode(l:raw), 'content', ''))
+
         let l:pos_x = col('.') - 1
         let l:pos_y = line('.')
 

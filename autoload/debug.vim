@@ -92,7 +92,5 @@ function! debug#clear() abort
 endfunction
 
 function! debug#setup() abort
-    call debug#log('Debug pane initialized')
-
     command! LlamaDebugClear call debug#clear()
 endfunction
