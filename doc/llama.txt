@@ -20,6 +20,7 @@ Default Shortcut
 - Shift+Tab - accept just the first line of the suggestion
 - Ctrl+B    - accept just the first word of the suggestion
 - Ctrl+F    - trigger FIM completion manually
+- Ctrl+D    - toggle the debug pane
 
 ================================================================================
 Commands
@@ -43,6 +44,10 @@ Commands
 
 		Toggle autofim for this vim/nvim session
 		Equivalent to vimscript function: `llama#toggle_auto_fim()`
+
+*:LlamaDebugClear*
+		Clear the debug pane logs.
+		Equivalent to vimscript function: `debug#clear()`
 
 ================================================================================
 How to start the server
@@ -96,7 +101,7 @@ Currently the default config is:
 		    \ 'n_predict':          128,
 		    \ 'stop_strings':       [],
 		    \ 't_max_prompt_ms':    500,
-		    \ 't_max_predict_ms':   500,
+		    \ 't_max_predict_ms':   1000,
 		    \ 'show_info':          2,
 		    \ 'auto_fim':           v:true,
 		    \ 'max_line_suffix':    8,
@@ -109,6 +114,7 @@ Currently the default config is:
 		    \ 'keymap_accept_full': "<Tab>",
 		    \ 'keymap_accept_line': "<S-Tab>",
 		    \ 'keymap_accept_word': "<C-B>",
+		    \ 'keymap_debug':       "<C-D>",
 		    \ 'enable_at_startup':  v:true,
 		    \ }
 <
@@ -174,6 +180,8 @@ keymaps parameters:
 - {keymap_accept_line}	keymap to accept line suggestion, default: <S-Tab>
 
 - {keymap_accept_word}	keymap to accept word suggestion, default: <C-B>
+
+- {keymap_debug}		keymap to toggle the debug pane, default: <C-D>
 
 Example:
 
