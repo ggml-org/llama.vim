@@ -1072,9 +1072,9 @@ function! s:fim_render(pos_x, pos_y, data)
     endif
 
     " setup accept shortcuts
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_full . ' <ESC>:call llama#fim_accept(''full'')<CR>a'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_line . ' <ESC>:call llama#fim_accept(''line'')<CR>a'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_word . ' <ESC>:call llama#fim_accept(''word'')<CR>a'
 
     let s:hint_shown = v:true
 
