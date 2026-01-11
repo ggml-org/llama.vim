@@ -1189,17 +1189,17 @@ function! llama#is_hint_shown()
 endfunction
 
 function! llama#debug_log(msg, ...) abort
-    return call('debug#log', [a:msg] + a:000)
+    return call('llama_debug#log', [a:msg] + a:000)
 endfunction
 
 function! llama#debug_toggle() abort
-    return debug#toggle()
+    return llama_debug#toggle()
 endfunction
 
 function! llama#debug_clear() abort
-    return debug#clear()
+    return llama_debug#clear()
 endfunction
 
 function! llama#debug_setup() abort
-    return debug#setup()
+    return llama_debug#setup()
 endfunction
