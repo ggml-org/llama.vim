@@ -43,6 +43,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "   keymap_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_debug:       keymap to toggle the debug pane,  default: <C-D>
 "
 let s:default_config = {
     \ 'endpoint':           'http://127.0.0.1:8012/infill',
@@ -66,6 +67,7 @@ let s:default_config = {
     \ 'keymap_accept_full': "<Tab>",
     \ 'keymap_accept_line': "<S-Tab>",
     \ 'keymap_accept_word': "<C-B>",
+    \ 'keymap_debug':       "<C-D>",
     \ 'enable_at_startup':  v:true,
     \ }
 
@@ -134,12 +136,20 @@ endfunction
 
 function! llama#disable()
     call llama#fim_hide()
+
     autocmd! llama
-    exe "silent! iunmap " .. g:llama_config.keymap_trigger
+
+    " TODO: these unmaps don't seem to work properly
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_trigger
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_full
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_line
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_word
+
+    exe "silent!  unmap          " .. g:llama_config.keymap_debug
+
     let s:llama_enabled = v:false
+
+    call llama#debug_log('plugin disabled')
 endfunction
 
 function! llama#toggle()
@@ -154,18 +164,24 @@ function! llama#toggle_auto_fim()
     if !s:llama_enabled
         return
     endif
+
     let g:llama_config.auto_fim = !g:llama_config.auto_fim
+
     call llama#setup_autocmds()
 endfunction
 
-function! llama#setup_commands()
-    command! LlamaEnable  call llama#enable()
-    command! LlamaDisable call llama#disable()
-    command! LlamaToggle  call llama#toggle()
+function! llama#setup()
+    command! LlamaEnable         call llama#enable()
+    command! LlamaDisable        call llama#disable()
+    command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
+
+    call llama#debug_setup()
 endfunction
 
 function! llama#init()
+    call llama#debug_log('llama.vim initializing ...')
+
     if !executable('curl')
         echohl WarningMsg
         echo 'llama.vim requires the "curl" command to be available'
@@ -173,7 +189,7 @@ function! llama#init()
         return
     endif
 
-    call llama#setup_commands()
+    call llama#setup()
 
     let s:fim_data = {}
 
@@ -216,7 +232,6 @@ endfunction
 function! llama#setup_autocmds()
     augroup llama
         autocmd!
-        exe "autocmd InsertEnter * inoremap <expr> <silent> " .. g:llama_config.keymap_trigger .. " llama#fim_inline(v:false, v:false)"
         autocmd InsertLeavePre  * call llama#fim_hide()
 
         autocmd CompleteChanged * call llama#fim_hide()
@@ -239,13 +254,16 @@ function! llama#setup_autocmds()
         " gather chunk upon saving the file
         autocmd BufWritePost    * call s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
     augroup END
-
 endfunction
 
 function! llama#enable()
     if s:llama_enabled
         return
     endif
+
+    " setup keymaps
+    exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_trigger . " llama#fim_inline(v:false, v:false)"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_debug .. " :call llama#debug_toggle()<CR>"
 
     call llama#setup_autocmds()
 
@@ -257,6 +275,8 @@ function! llama#enable()
     endif
 
     let s:llama_enabled = v:true
+
+    call llama#debug_log('plugin enabled')
 endfunction
 
 " compute how similar two chunks of text are
@@ -528,6 +548,11 @@ endfunction
 
 " necessary for 'inoremap <expr>'
 function! llama#fim_inline(is_auto, use_cache) abort
+    " exit if not enabled
+    if !s:llama_enabled
+        return ''
+    endif
+
     " we already have a suggestion displayed - hide it
     if s:hint_shown && !a:is_auto
         call llama#fim_hide()
@@ -771,6 +796,9 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
 
     " if nothing is currently displayed - show the hint directly
     if !s:hint_shown || !s:fim_data['can_accept']
+        " log only non-speculative fims for now
+        call llama#debug_log('fim_on_response', get(json_decode(l:raw), 'content', ''))
+
         let l:pos_x = col('.') - 1
         let l:pos_y = line('.')
 
@@ -1158,4 +1186,20 @@ endfunction
 
 function! llama#is_hint_shown()
     return s:hint_shown
+endfunction
+
+function! llama#debug_log(msg, ...) abort
+    return call('llama_debug#log', [a:msg] + a:000)
+endfunction
+
+function! llama#debug_toggle() abort
+    return llama_debug#toggle()
+endfunction
+
+function! llama#debug_clear() abort
+    return llama_debug#clear()
+endfunction
+
+function! llama#debug_setup() abort
+    return llama_debug#setup()
 endfunction
