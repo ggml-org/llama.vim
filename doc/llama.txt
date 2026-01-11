@@ -114,9 +114,14 @@ Currently the default config is:
 		    \ 'keymap_accept_full': "<Tab>",
 		    \ 'keymap_accept_line': "<S-Tab>",
 		    \ 'keymap_accept_word': "<C-B>",
-		    \ 'keymap_debug':       "<C-D>",
-		    \ 'enable_at_startup':  v:true,
-		    \ }
+    \ 'keymap_debug':       "<C-D>",
+    \ 'keymap_instruction': "<C-I>",
+    \ 'keymap_instruction_cancel': "<C-C>",
+    \ 'chat_endpoint': 'http://127.0.0.1:8012/v1/chat/completions',
+    \ 'instruction_temperature': 0.0,
+    \ 'enable_at_startup':  v:true,
+    \ }
+
 <
 
 - {endpoint}			llama.cpp server endpoint

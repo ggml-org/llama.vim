@@ -2,6 +2,8 @@
 " colors (adjust to your liking)
 highlight default llama_hl_hint guifg=#ff772f ctermfg=202
 highlight default llama_hl_info guifg=#77ff2f ctermfg=119
+highlight default llama_diff_add guifg=#a6e22e ctermfg=106
+highlight default llama_diff_del guifg=#f92672 ctermfg=161
 
 " general parameters:
 "
@@ -68,11 +70,20 @@ let s:default_config = {
     \ 'keymap_accept_line': "<S-Tab>",
     \ 'keymap_accept_word': "<C-B>",
     \ 'keymap_debug':       "<C-D>",
+    \ 'keymap_instruction': "<C-I>",
+    \ 'keymap_instruction_cancel': "<C-C>",
+    \ 'chat_endpoint': 'http://127.0.0.1:8013/v1/chat/completions',
+    \ 'instruction_temperature': 0.0,
     \ 'enable_at_startup':  v:true,
     \ }
 
+
 let llama_config = get(g:, 'llama_config', s:default_config)
 let g:llama_config = extendnew(s:default_config, llama_config, 'force')
+
+" Global dictionary to keep track of active instruction requests
+let g:llama_instructions = {}
+
 
 let s:llama_enabled = v:false
 
@@ -147,7 +158,8 @@ function! llama#disable()
 
     exe "silent!  unmap          " .. g:llama_config.keymap_debug
 
-    let s:llama_enabled = v:false
+let s:llama_enabled = v:false
+let s:current_instruction_id = ''
 
     call llama#debug_log('plugin disabled')
 endfunction
@@ -264,7 +276,8 @@ function! llama#enable()
     " setup keymaps
     exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_trigger . " llama#fim_inline(v:false, v:false)"
     exe "nnoremap <silent> " .. g:llama_config.keymap_debug .. " :call llama#debug_toggle()<CR>"
-
+    " visual instruction mapping
+    exe "vnoremap <silent> " . g:llama_config.keymap_instruction . " :<C-u>call llama#visual_instruction()<CR>"
     call llama#setup_autocmds()
 
     silent! call llama#fim_hide()
@@ -813,6 +826,247 @@ function! s:fim_on_exit(job_id, exit_code, event = v:null)
 
     let s:current_job = v:null
 endfunction
+
+" Instruction handling functions
+
+" send a visual instruction request
+function! llama#visual_instruction() abort
+    " ensure we are in visual mode
+    "if mode() !~# '^v'
+    "    return
+    "endif
+    " get visual selection range
+    let l:start_pos = getpos("'<")
+    let l:end_pos   = getpos("'>")
+    let l:start_line = l:start_pos[1]
+    let l:start_col  = l:start_pos[2] - 1
+    let l:end_line   = l:end_pos[1]
+    let l:end_col    = l:end_pos[2]
+    " extract selected lines
+    let l:lines = getline(l:start_line, l:end_line)
+    if len(l:lines) == 0
+        return
+    endif
+    " adjust first and last line for column offsets
+    let l:lines[0] = l:lines[0][l:start_col:]
+    let l:lines[-1] = l:lines[-1][:l:end_col - 1]
+    let l:selected = join(l:lines, "\n")
+    " prompt for instruction
+    let l:instr = input('Instruction: ')
+    if empty(l:instr)
+        return
+    endif
+    " build chat request payload
+    let l:messages = [{
+        \ 'role': 'system',
+        \ 'content': 'You are an assistant that returns a unified diff (or updated code) that applies the given instruction to the provided code block.'
+        \ }, {
+        \ 'role': 'user',
+        \ 'content': l:instr . "\n\n```code\n" . l:selected . "\n```"
+        \ }]
+    let l:request = {
+        \ 'model': g:llama_config.model,
+        \ 'messages': l:messages,
+        \ 'temperature': get(g:llama_config, 'instruction_temperature', 0.0),
+        \ 'stream': v:false
+        \ }
+    let l:curl_cmd = ['curl', '--silent', '--no-buffer', '--request', 'POST', '--url', g:llama_config.chat_endpoint, '--header', 'Content-Type: application/json', '--data', '@-']
+    if exists('g:llama_config.api_key') && !empty(g:llama_config.api_key)
+        call extend(l:curl_cmd, ['--header', 'Authorization: Bearer ' . g:llama_config.api_key])
+    endif
+    " generate unique id for this request
+    let l:req_id = string(localtime()) . '_' . string(rand())
+    " store instruction context
+    let g:llama_instructions[l:req_id] = {
+        \ 'start_line': l:start_line,
+        \ 'start_col':  l:start_col,
+        \ 'end_line':   l:end_line,
+        \ 'end_col':    l:end_col,
+        \ 'original':   l:selected,
+        \ 'status':     'pending',
+        \ 'job':        v:null,
+        \ 'ns_id':      exists('*nvim_create_namespace') ? nvim_create_namespace('vt_instruction_' . l:req_id) : 0,
+        \ }
+    let l:req_json = json_encode(l:request)
+    call llama#debug_log('instruct', l:curl_cmd)
+    let l:job = jobstart(l:curl_cmd, {
+        \ 'on_stdout': function('s:instruction_on_response', [l:req_id]),
+        \ 'on_exit':   function('s:instruction_on_exit', [l:req_id]),
+        \ 'stdout_buffered': v:true
+        \ })
+    let g:llama_instructions[l:req_id].job = l:job
+    call chansend(l:job, l:req_json)
+    call chanclose(l:job, 'stdin')
+    " exit visual mode
+    normal! gv
+    call feedkeys("\<Esc>")
+endfunction
+
+" response handler for instruction
+function! s:instruction_on_response(id, job_id, data, event = v:null) abort
+    if s:ghost_text_nvim
+        let l:raw = join(a:data, "\n")
+    elseif s:ghost_text_vim
+        let l:raw = a:data
+    endif
+    call llama#debug_log('inst response', l:raw)
+    if empty(l:raw)
+        return
+    endif
+    call llama#debug_log('checkpoint', '1')
+    if l:raw !~# '^\s*{' || l:raw !~# '\v"content"\s*:"'
+        return
+    endif
+    call llama#debug_log('checkpoint', '2')
+    try
+        let l:resp = json_decode(l:raw)
+    catch
+        return
+    endtry
+    call llama#debug_log('checkpoint', '3')
+    "let l:content = get(l:resp, 'content', '')
+    " take the content from choices[0].message.content
+    let l:content = get(get(get(l:resp, 'choices', [])[0], 'message', {}), 'content', '')
+    if empty(l:content)
+        return
+    endif
+    call llama#debug_log('content', l:content)
+    if has_key(g:llama_instructions, a:id)
+        " Extract code block from the response (remove markdown fences)"
+        let l:raw_lines = split(l:content, "\n")
+        let l:new_text_lines = []
+        for l:ln in l:raw_lines
+            if l:ln =~ '^```'
+                continue
+            endif
+            call add(l:new_text_lines, l:ln)
+        endfor
+        let l:new_text = join(l:new_text_lines, "\n")
+        " Compute a simple diff: all original lines removed, all new lines added"
+        let l:orig_lines = split(g:llama_instructions[a:id].original, "\n")
+        let l:diff_lines = []
+        for l:ol in l:orig_lines
+            call add(l:diff_lines, '-' . l:ol)
+        endfor
+        for l:nl in l:new_text_lines
+            call add(l:diff_lines, '+' . nl)
+        endfor
+        let l:diff = join(l:diff_lines, "\n")
+        let g:llama_instructions[a:id].diff = l:diff
+        let g:llama_instructions[a:id].new_text = l:new_text
+        let g:llama_instructions[a:id].status = 'ready'
+        call s:show_instruction_preview(a:id)
+    endif
+    call llama#debug_log('checkpoint', '5')
+endfunction
+
+" exit handler for instruction
+function! s:instruction_on_exit(id, job_id, exit_code, event = v:null) abort
+    if a:exit_code != 0
+        echom "Instruction request failed with exit code: " . a:exit_code
+        call llama#instruction_clear(a:id)
+    endif
+    " job cleanup is handled in clear
+endfunction
+
+" display diff preview using virtual text
+function! s:show_instruction_preview(id) abort
+    if !has('nvim')
+        return
+    endif
+    if !has_key(g:llama_instructions, a:id)
+        return
+    endif
+    call llama#debug_log('show', '0')
+    let l:info = g:llama_instructions[a:id]
+    let l:bufnr = bufnr('%')
+    let l:ns = l:info.ns_id
+    " clear any previous extmarks in this namespace
+    call nvim_buf_clear_namespace(l:bufnr, l:ns, 0, -1)
+    let l:diff = get(l:info, 'diff', '')
+    if empty(l:diff)
+        return
+    endif
+    call llama#debug_log('show', '1')
+    let l:lines = split(l:diff, "\n")
+    call llama#debug_log('diff', l:diff)
+    call llama#debug_log('lines', l:lines)
+    for l:i in range(len(l:lines))
+        let l:lnum = l:info.start_line - 1 + l:i
+        let l:text = l:lines[l:i]
+        if l:text =~ '^+'
+            let l:hl = 'llama_diff_add'
+        elseif l:text =~ '^-'
+            let l:hl = 'llama_diff_del'
+        else
+            let l:hl = ''
+        endif
+        call llama#debug_log('show', '2 '.l:i)
+        if !empty(l:hl)
+            call llama#debug_log('diff', '2 '.l:i)
+            call nvim_buf_set_extmark(l:bufnr, l:ns, l:lnum, 0, {'virt_text': [[l:text, l:hl]]})
+        endif
+    endfor
+    " map accept and cancel keys locally
+    " map accept and cancel keys locally for both insert and normal mode
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_full . ' <C-O>:call llama#instruction_accept(' . string(a:id) . ')<CR>'
+    exe 'nnoremap <buffer> ' . g:llama_config.keymap_accept_full . ' :call llama#instruction_accept(' . string(a:id) . ')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_instruction_cancel . ' <C-O>:call llama#instruction_cancel(' . string(a:id) . ')<CR>'
+    exe 'nnoremap <buffer> ' . g:llama_config.keymap_instruction_cancel . ' :call llama#instruction_cancel(' . string(a:id) . ')<CR>'
+    let g:llama_instructions[a:id].status = 'ready'
+endfunction
+
+" accept instruction diff
+function! llama#instruction_accept(id) abort
+    if !has_key(g:llama_instructions, a:id)
+        return
+    endif
+    let l:info = g:llama_instructions[a:id]
+    if l:info.status !=# 'ready'
+        return
+    endif
+    let l:new_text = get(l:info, 'new_text', '')
+    if empty(l:new_text)
+        return
+    endif
+    " split the new text into lines
+    let l:new = split(l:new_text, "\n")
+    " replace original region with the new lines
+    call deletebufline(bufnr('%'), l:info.start_line, l:info.end_line)
+    call append(l:info.start_line - 1, l:new)
+    call llama#instruction_clear(a:id)
+endfunction
+
+" cancel instruction preview
+function! llama#instruction_cancel(id) abort
+    if !has_key(g:llama_instructions, a:id)
+        return
+    endif
+    call llama#instruction_clear(a:id)
+endfunction
+
+" clear instruction data and extmarks
+function! llama#instruction_clear(id) abort
+    if !has_key(g:llama_instructions, a:id)
+        return
+    endif
+    let l:info = g:llama_instructions[a:id]
+    if has('nvim')
+        let l:bufnr = bufnr('%')
+        call nvim_buf_clear_namespace(l:bufnr, l:info.ns_id, 0, -1)
+    endif
+    " remove local mappings
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_full
+    exe 'silent! nunmap <buffer> ' . g:llama_config.keymap_accept_full
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_instruction_cancel
+    exe 'silent! nunmap <buffer> ' . g:llama_config.keymap_instruction_cancel
+    " stop job if still running
+    if l:info.job != v:null
+        call jobstop(l:info.job)
+    endif
+    call remove(g:llama_instructions, a:id)
+endfunction
+
 
 function! s:on_move()
     let s:t_last_move = reltime()
