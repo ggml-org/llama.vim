@@ -20,7 +20,6 @@ Default Shortcut
 - Shift+Tab - accept just the first line of the suggestion
 - Ctrl+B    - accept just the first word of the suggestion
 - Ctrl+F    - trigger FIM completion manually
-- Ctrl+D    - toggle the debug pane
 
 ================================================================================
 Commands
@@ -48,6 +47,10 @@ Commands
 *:LlamaDebugClear*
 		Clear the debug pane logs.
 		Equivalent to vimscript function: `debug#clear()`
+
+*:LlamaDebugToggle*
+		Toggle the debug pane.
+		Equivalent to vimscript function: `debug#toggle()`
 
 ================================================================================
 How to start the server
@@ -93,29 +96,29 @@ variable.
 Currently the default config is:
 >vim
 		let s:default_config = {
-		    \ 'endpoint':           'http://127.0.0.1:8012/infill',
-		    \ 'api_key':            '',
-		    \ 'model':              '',
-		    \ 'n_prefix':           256,
-		    \ 'n_suffix':           64,
-		    \ 'n_predict':          128,
-		    \ 'stop_strings':       [],
-		    \ 't_max_prompt_ms':    500,
-		    \ 't_max_predict_ms':   1000,
-		    \ 'show_info':          2,
-		    \ 'auto_fim':           v:true,
-		    \ 'max_line_suffix':    8,
-		    \ 'max_cache_keys':     250,
-		    \ 'ring_n_chunks':      16,
-		    \ 'ring_chunk_size':    64,
-		    \ 'ring_scope':         1024,
-		    \ 'ring_update_ms':     1000,
-		    \ 'keymap_trigger':     "<C-F>",
-		    \ 'keymap_accept_full': "<Tab>",
-		    \ 'keymap_accept_line': "<S-Tab>",
-		    \ 'keymap_accept_word': "<C-B>",
-		    \ 'keymap_debug':       "<C-D>",
-		    \ 'enable_at_startup':  v:true,
+		    \ 'endpoint':               'http://127.0.0.1:8012/infill',
+		    \ 'api_key':                '',
+		    \ 'model':                  '',
+		    \ 'n_prefix':               256,
+		    \ 'n_suffix':               64,
+		    \ 'n_predict':              128,
+		    \ 'stop_strings':           [],
+		    \ 't_max_prompt_ms':        500,
+		    \ 't_max_predict_ms':       1000,
+		    \ 'show_info':              2,
+		    \ 'auto_fim':               v:true,
+		    \ 'max_line_suffix':        8,
+		    \ 'max_cache_keys':         250,
+		    \ 'ring_n_chunks':          16,
+		    \ 'ring_chunk_size':        64,
+		    \ 'ring_scope':             1024,
+		    \ 'ring_update_ms':         1000,
+		    \ 'keymap_fim_trigger':     "<C-F>",
+		    \ 'keymap_fim_accept_full': "<Tab>",
+		    \ 'keymap_fim_accept_line': "<S-Tab>",
+		    \ 'keymap_fim_accept_word': "<C-B>",
+		    \ 'keymap_debug_toggle':    v:null,
+		    \ 'enable_at_startup':      v:true,
 		    \ }
 <
 
@@ -173,15 +176,15 @@ parameters for the ring-buffer with extra context:
 
 keymaps parameters:
 
-- {keymap_trigger}		keymap to trigger the auto completion, default: <C-F>
+- {keymap_fim_trigger}		keymap to trigger the auto completion, default: <C-F>
 
-- {keymap_accept_full}	keymap to accept full suggestion, default: <Tab>
+- {keymap_fim_accept_full}	keymap to accept full suggestion, default: <Tab>
 
-- {keymap_accept_line}	keymap to accept line suggestion, default: <S-Tab>
+- {keymap_fim_accept_line}	keymap to accept line suggestion, default: <S-Tab>
 
-- {keymap_accept_word}	keymap to accept word suggestion, default: <C-B>
+- {keymap_fim_accept_word}	keymap to accept word suggestion, default: <C-B>
 
-- {keymap_debug}		keymap to toggle the debug pane, default: <C-D>
+- {keymap_debug_toggle}		keymap to toggle the debug pane, default: null
 
 Example:
 
@@ -204,7 +207,7 @@ Example:
 					n_prefix = 1024,
 					n_suffix= 1024,
 					auto_fim = false,
-					keymap_accept_full = "<C-S>",
+					keymap_fim_accept_full = "<C-S>",
 					enable_at_startup = false,
 				}
 			end,
@@ -219,7 +222,7 @@ Example:
 					n_prefix = 1024,
 					n_suffix = 1024,
 					auto_fim = false,
-					keymap_accept_full = "<C-S>",
+					keymap_fim_accept_full = "<C-S>",
 					stop_strings = { "\n" },
 					enable_at_startup = false,
 				}
