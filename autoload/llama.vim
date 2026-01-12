@@ -39,39 +39,63 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "
 " keymaps parameters:
 "
-"   keymap_trigger:     keymap to trigger the completion, default: <C-F>
-"   keymap_accept_full: keymap to accept full suggestion, default: <Tab>
-"   keymap_accept_line: keymap to accept line suggestion, default: <S-Tab>
-"   keymap_accept_word: keymap to accept word suggestion, default: <C-B>
-"   keymap_debug:       keymap to toggle the debug pane,  default: null
+"   keymap_fim_trigger:     keymap to trigger the completion, default: <C-F>
+"   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
+"   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
+"   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
 "
 let s:default_config = {
-    \ 'endpoint':           'http://127.0.0.1:8012/infill',
-    \ 'api_key':            '',
-    \ 'model':              '',
-    \ 'n_prefix':           256,
-    \ 'n_suffix':           64,
-    \ 'n_predict':          128,
-    \ 'stop_strings':       [],
-    \ 't_max_prompt_ms':    500,
-    \ 't_max_predict_ms':   1000,
-    \ 'show_info':          2,
-    \ 'auto_fim':           v:true,
-    \ 'max_line_suffix':    8,
-    \ 'max_cache_keys':     250,
-    \ 'ring_n_chunks':      16,
-    \ 'ring_chunk_size':    64,
-    \ 'ring_scope':         1024,
-    \ 'ring_update_ms':     1000,
-    \ 'keymap_trigger':     "<C-F>",
-    \ 'keymap_accept_full': "<Tab>",
-    \ 'keymap_accept_line': "<S-Tab>",
-    \ 'keymap_accept_word': "<C-B>",
-    \ 'keymap_debug':       v:null,
-    \ 'enable_at_startup':  v:true,
+    \ 'endpoint':               'http://127.0.0.1:8012/infill',
+    \ 'api_key':                '',
+    \ 'model':                  '',
+    \ 'n_prefix':               256,
+    \ 'n_suffix':               64,
+    \ 'n_predict':              128,
+    \ 'stop_strings':           [],
+    \ 't_max_prompt_ms':        500,
+    \ 't_max_predict_ms':       1000,
+    \ 'show_info':              2,
+    \ 'auto_fim':               v:true,
+    \ 'max_line_suffix':        8,
+    \ 'max_cache_keys':         250,
+    \ 'ring_n_chunks':          16,
+    \ 'ring_chunk_size':        64,
+    \ 'ring_scope':             1024,
+    \ 'ring_update_ms':         1000,
+    \ 'keymap_fim_trigger':     "<C-F>",
+    \ 'keymap_fim_accept_full': "<Tab>",
+    \ 'keymap_fim_accept_line': "<S-Tab>",
+    \ 'keymap_fim_accept_word': "<C-B>",
+    \ 'keymap_debug_toggle':    v:null,
+    \ 'enable_at_startup':      v:true,
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
+
+" rename deprecated keys in `llama_config`.
+let s:renames = {
+      \ 'keymap_trigger'     : 'keymap_fim_trigger',
+      \ 'keymap_accept_full' : 'keymap_fim_accept_full',
+      \ 'keymap_accept_line' : 'keymap_fim_accept_line',
+      \ 'keymap_accept_word' : 'keymap_fim_accept_word',
+      \ 'keymap_debug'       : 'keymap_debug_toggle',
+      \ }
+
+for [old_key, new_key] in items(s:renames)
+    if has_key(llama_config, old_key)
+        let llama_config[new_key] = llama_config[old_key]
+
+        call remove(llama_config, old_key)
+
+        echohl WarningMsg
+        echomsg printf(
+            \ 'llama.vim: %s is deprecated, use %s instead',
+            \ old_key, new_key)
+        echohl None
+    endif
+endfor
+
 let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 
 let s:llama_enabled = v:false
@@ -140,12 +164,12 @@ function! llama#disable()
     autocmd! llama
 
     " TODO: these unmaps don't seem to work properly
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_trigger
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_full
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_line
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_accept_word
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_trigger
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_full
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_line
+    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
 
-    exe "silent!  unmap          " .. g:llama_config.keymap_debug
+    exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
 
     let s:llama_enabled = v:false
 
@@ -262,8 +286,8 @@ function! llama#enable()
     endif
 
     " setup keymaps
-    exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_trigger . " llama#fim_inline(v:false, v:false)"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_debug .. " :call llama#debug_toggle()<CR>"
+    exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
 
     call llama#setup_autocmds()
 
@@ -1100,9 +1124,9 @@ function! s:fim_render(pos_x, pos_y, data)
     endif
 
     " setup accept shortcuts
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
 
     let s:hint_shown = v:true
 
@@ -1179,9 +1203,9 @@ function! llama#fim_hide()
     endif
 
     " remove the mappings
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_full
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_line
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_accept_word
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_line
+    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
 endfunction
 
 function! llama#is_hint_shown()
