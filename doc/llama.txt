@@ -20,7 +20,7 @@ Default Shortcut
 - Shift+Tab - accept just the first line of the suggestion
 - Ctrl+B    - accept just the first word of the suggestion
 - Ctrl+F    - trigger FIM completion manually
-- Ctrl+D    - toggle the debug pane
+- null      - toggle the debug pane
 
 ================================================================================
 Commands
@@ -48,6 +48,10 @@ Commands
 *:LlamaDebugClear*
 		Clear the debug pane logs.
 		Equivalent to vimscript function: `debug#clear()`
+
+:LlamaDebugToggle*
+		Toggle the debug pane.
+		Equivalent to vimscript function: `debug#toggle()`
 
 ================================================================================
 How to start the server
@@ -114,7 +118,7 @@ Currently the default config is:
 		    \ 'keymap_accept_full': "<Tab>",
 		    \ 'keymap_accept_line': "<S-Tab>",
 		    \ 'keymap_accept_word': "<C-B>",
-		    \ 'keymap_debug':       "<C-D>",
+		    \ 'keymap_debug':       v:null,
 		    \ 'enable_at_startup':  v:true,
 		    \ }
 <
@@ -181,7 +185,7 @@ keymaps parameters:
 
 - {keymap_accept_word}	keymap to accept word suggestion, default: <C-B>
 
-- {keymap_debug}		keymap to toggle the debug pane, default: <C-D>
+- {keymap_debug}		keymap to toggle the debug pane, default: null
 
 Example:
 

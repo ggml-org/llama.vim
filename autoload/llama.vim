@@ -43,7 +43,7 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "   keymap_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_accept_word: keymap to accept word suggestion, default: <C-B>
-"   keymap_debug:       keymap to toggle the debug pane,  default: <C-D>
+"   keymap_debug:       keymap to toggle the debug pane,  default: null
 "
 let s:default_config = {
     \ 'endpoint':           'http://127.0.0.1:8012/infill',
@@ -67,7 +67,7 @@ let s:default_config = {
     \ 'keymap_accept_full': "<Tab>",
     \ 'keymap_accept_line': "<S-Tab>",
     \ 'keymap_accept_word': "<C-B>",
-    \ 'keymap_debug':       "<C-D>",
+    \ 'keymap_debug':       v:null,
     \ 'enable_at_startup':  v:true,
     \ }
 
