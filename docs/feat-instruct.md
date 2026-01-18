@@ -83,56 +83,21 @@ This approach works in both classic Vim (via `matchaddpos` fallback) and Neovim 
 
 ### Configuration Options (`g:llama_instruct`) 
 
-### Configuration Changes for Instruct Endpoint
-- The existing `config.endpoint` used for the FIM (Fill‑in‑the‑Middle) API will be renamed to `config.endpoint_fim`.
-- The new `config.endpoint_inst` will point to an OpenAI‑compatible `/v1/chat/completions` endpoint. The payload follows the OpenAI spec with a `messages` array where the user message contains the instruction and input text.
-- A new property `config.endpoint_inst` will be introduced for the instruction endpoint, which follows the same HTTP request format as the FIM endpoint (JSON payload with `instruction` and `input`).
-- These changes are **design‑only notes**; actual code modifications will be implemented later.
-
-### Model Configuration Changes for Instruct Endpoint
-- The existing `config.model` will be renamed to `config.model_fim`.
-- A new property `config.model_inst` will be introduced for the instruction mode, defaulting to the same model file unless overridden.
-- These changes are **design‑only notes**; code updates will be applied later.
-
 ### Development notes
 
 - **Endpoint changes**
   - Rename `config.endpoint` to `config.endpoint_fim`.
-  - Add new `config.endpoint_inst` for instruction endpoint (same JSON format as FIM).
-
+  - Add `config.endpoint_inst`, an OpenAI‑compatible `/v1/chat/completions` endpoint for instruction mode.
 - **Model changes**
   - Rename `config.model` to `config.model_fim`.
-  - Add new `config.model_inst` for instruction mode (defaults to same model file).
+  - Add `config.model_inst` for instruction mode (defaults to same model file).
 
 These items are design‑only notes; actual code updates will be added later.
+
 
 ### Error handling
 - If the backend returns an error, display it via `echoerr` and leave the original block untouched.
 - Timeout (default 30 s) can be configured via `g:llama_instruct.timeout`.
 
-## Example Usage
-```vim
-" Select lines 5‑10 and translate to French
-:5,10LlamaInstruct
-" Prompt appears: Translate to French
-```
-Result:
-```text
-# French translation of the original block appears here
-```
 
-## Documentation & Tests
-- Add entry to `:help llama-instruct`.
-- Unit tests (`test/llama_instruct_spec.vim`) covering:
-  - Successful transformation replaces the range correctly.
-  - Handles longer/shorter output than input.
-  - Proper error propagation.
-  - Async behavior does not block UI.
-
-## Future Extensions
-- Support multiple selections (via visual block mode).
-- Add `g:llama_instruct.prompts` table for predefined shortcuts (e.g., `"comment": "Add explanatory comments"`).
-- Integration with the existing `llama#apply` workflow for batch processing.
-
----
 *Specification authored by the development team, 2026-01-18.*
