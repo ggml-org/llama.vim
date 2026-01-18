@@ -37,13 +37,28 @@ The plugin will send the selected lines together with the instruction to the Lla
 - The response is plain text containing the transformed block.
 
 ### Configuration Options (`g:llama_instruct`) 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `model` | string | `"ggml-model-q4_0.bin"` | Path to the model used for instruction mode |
-| `temperature` | number | `0.7` | Sampling temperature |
-| `max_tokens` | number | `1024` | Maximum tokens in the response |
-| `keymap` | string | `"<leader>li"` | Normal‑mode key mapping to invoke the command |
-| `spinner` | bool | `v:true` | Show a spinner while waiting |
+
+### Configuration Changes for Instruct Endpoint
+- The existing `config.endpoint` used for the FIM (Fill‑in‑the‑Middle) API will be renamed to `config.endpoint_fim`.
+- A new property `config.endpoint_inst` will be introduced for the instruction endpoint, which follows the same HTTP request format as the FIM endpoint (JSON payload with `instruction` and `input`).
+- These changes are **design‑only notes**; actual code modifications will be implemented later.
+
+### Model Configuration Changes for Instruct Endpoint
+- The existing `config.model` will be renamed to `config.model_fim`.
+- A new property `config.model_inst` will be introduced for the instruction mode, defaulting to the same model file unless overridden.
+- These changes are **design‑only notes**; code updates will be applied later.
+
+### Development notes
+
+- **Endpoint changes**
+  - Rename `config.endpoint` to `config.endpoint_fim`.
+  - Add new `config.endpoint_inst` for instruction endpoint (same JSON format as FIM).
+
+- **Model changes**
+  - Rename `config.model` to `config.model_fim`.
+  - Add new `config.model_inst` for instruction mode (defaults to same model file).
+
+These items are design‑only notes; actual code updates will be added later.
 
 ### Error handling
 - If the backend returns an error, display it via `echoerr` and leave the original block untouched.
