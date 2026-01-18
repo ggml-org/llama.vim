@@ -62,6 +62,13 @@ This provides an intuitive way for users to stop an edit they no longer want.
 ### Acceptance
 When a request reaches the **ready** state, the user can accept the generated edit by pressing `<Tab>` in Normal mode while the cursor is inside the highlighted range. The plugin will then replace the original block with the generated text, clear the extmark, and remove the request from the state tracking.
 
+### Virtual lines visualization
+While a request is in the **processing** or **generating** state, the plugin will display a block of virtual lines between the end of the edited range (`N1`) and the next line (`N1+1`). This block acts as a visual placeholder indicating that work is in progress.
+
+- The virtual lines are rendered using Neovim's `nvim_buf_set_extmark` with the `virt_text` property (fallback to `matchadd`‑style virtual text in classic Vim).\n- When the request transitions to **ready**, the virtual block is replaced with the actual result text, showing the generated content inline before the user accepts it with `<Tab>`.\n- The virtual block updates dynamically if the result arrives in chunks or if the user scrolls, ensuring the placeholder stays correctly positioned relative to the original range.
+
+This approach provides immediate feedback about ongoing processing without altering the buffer's real content until the user decides to apply the changes.
+
 This approach works in both classic Vim (via `matchaddpos` fallback) and Neovim (via `nvim_buf_set_extmark`).
 
 ### Configuration Options (`g:llama_instruct`) 
