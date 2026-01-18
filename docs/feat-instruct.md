@@ -14,7 +14,7 @@ The **Instruct Block Editing** feature allows users to select a range of lines i
 The plugin will send the selected lines together with the instruction to the Llama inference backend, receive the transformed text, and replace the original block.
 
 ## User Workflow
-1. **Select a block** – Use visual mode (`v`/`V`/`Ctrl‑V`) or a range motion (`:10,20`).
+1. **Select a block** – Use linewise visual mode (`V`/Shift+V) or a range motion (`:10,20`).
 2. **Trigger the command** – `:LlamaInstruct` (or the mapped key `<leader>li`).
 3. **Enter instruction** – A prompt opens (via `input()`), the user types the instruction.
 4. **Processing** – The plugin sends a request to the LLM, showing a spinner/status line.
@@ -35,6 +35,34 @@ The plugin will send the selected lines together with the instruction to the Lla
   {"instruction":"<user instruction>","input":"<selected text>"}
   ```
 - The response is plain text containing the transformed block.
+
+### State Management
+
+The plugin will maintain an internal state for each edit request:
+
+- **Range** – the start and end line numbers of the selected block.
+- **Status** – one of `processing` (request sent), `generating` (receiving response), or `ready` (result available).
+
+This state enables the UI to show progress indicators and to handle cancellations or retries.
+
+### Highlighting active requests
+
+For each active request, the plugin will highlight the corresponding lines using Neovim's **extmark** API. Extmarks anchor the highlight to the text, so if new lines are inserted or the buffer changes, the highlight stays attached to the original block. This ensures the user always sees which region is being processed.
+- Create an extmark for the selected range when the request starts.
+- Update the extmark's highlighting group based on the request **Status** (`processing`, `generating`, `ready`).
+- Clear the extmark once the result is processed or the request is cancelled.
+
+Multiple active requests can exist simultaneously in the same buffer. Each request gets its own independent extmark and status tracking, allowing overlapping or separate highlighted regions without interference.
+
+### Cancellation
+A request can be cancelled at any time by moving the cursor into the highlighted range and pressing <Esc> while in Normal mode. The plugin will detect this input, abort the pending async job, clear the extmark, and remove the request state.
+
+This provides an intuitive way for users to stop an edit they no longer want.
+
+### Acceptance
+When a request reaches the **ready** state, the user can accept the generated edit by pressing `<Tab>` in Normal mode while the cursor is inside the highlighted range. The plugin will then replace the original block with the generated text, clear the extmark, and remove the request from the state tracking.
+
+This approach works in both classic Vim (via `matchaddpos` fallback) and Neovim (via `nvim_buf_set_extmark`).
 
 ### Configuration Options (`g:llama_instruct`) 
 
