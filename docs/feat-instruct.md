@@ -18,7 +18,7 @@ The plugin will send the selected lines together with the instruction to the Lla
 2. **Trigger the command** – `:LlamaInstruct` (or the mapped key `<leader>li`).
 3. **Enter instruction** – A prompt opens (via `input()`), the user types the instruction.
 4. **Processing** – The plugin sends a request to the LLM, showing a spinner/status line.
-5. **Replace** – The response replaces the original selection, preserving the cursor position.
+5. **Replace** – The response replaces the original selection.
 
 ## Design Details
 ### Vimscript API
@@ -30,10 +30,20 @@ The plugin will send the selected lines together with the instruction to the Lla
 
 ### Async Communication
 - Uses the existing async job infrastructure (`llama#job_start`) to avoid blocking the UI.
-- The request payload is a JSON object:
+- The request payload follows the OpenAI `/v1/chat/completions` schema. It contains a `system` message that sets the assistant’s role and a `user` message that packs the instruction, range information, surrounding context, and the selected text.
+
+  Example `messages` array (in JSON):
   ```json
-  {"instruction":"<user instruction>","input":"<selected text>"}
+  {
+    "role": "system",
+    "content": "You are a code‑editing assistant. Return ONLY the new content for the requested block."
+  },
+  {
+    "role": "user",
+    "content": "--- instruction ------------------------------------------------\nAdd explanatory comments.\n--- range -------------------------------------------------------\nstart_line: 12\nend_line: 15\n--- surrounding context (optional) -------------\nbefore:\n10: def compute(a, b):\n11: \"\"\"Compute something\"\"\"\nafter:\n16: return result\n--- extra context (ring buffer) -------------\n<extra_context_from_ring_buffer>\n--- selected block ---------------------------------------------\n12: x = a + b\n13: y = a * b\n14: z = x / y\n15: return z\n--- end --------------------------------------------------------"
+  }
   ```
+  The LLM should return only the transformed block as plain text.
 - The response is plain text containing the transformed block.
 
 ### State Management
@@ -75,6 +85,7 @@ This approach works in both classic Vim (via `matchaddpos` fallback) and Neovim 
 
 ### Configuration Changes for Instruct Endpoint
 - The existing `config.endpoint` used for the FIM (Fill‑in‑the‑Middle) API will be renamed to `config.endpoint_fim`.
+- The new `config.endpoint_inst` will point to an OpenAI‑compatible `/v1/chat/completions` endpoint. The payload follows the OpenAI spec with a `messages` array where the user message contains the instruction and input text.
 - A new property `config.endpoint_inst` will be introduced for the instruction endpoint, which follows the same HTTP request format as the FIM endpoint (JSON payload with `instruction` and `input`).
 - These changes are **design‑only notes**; actual code modifications will be implemented later.
 
