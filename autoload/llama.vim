@@ -2,6 +2,9 @@
 " colors (adjust to your liking)
 highlight default llama_hl_hint guifg=#ff772f ctermfg=202
 highlight default llama_hl_info guifg=#77ff2f ctermfg=119
+highlight default llama_hl_instruct_processing guibg=#333333 ctermbg=236
+highlight default llama_hl_instruct_generating guibg=#444444 ctermbg=238
+highlight default llama_hl_instruct_ready guibg=#555555 ctermbg=240
 
 " general parameters:
 "
@@ -69,6 +72,10 @@ let s:default_config = {
     \ 'keymap_fim_accept_word': "<C-B>",
     \ 'keymap_debug_toggle':    v:null,
     \ 'enable_at_startup':      v:true,
+    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
+    \ 'model_inst':             '',
+    \ 'timeout_inst':           30000,
+    \ 'temperature_inst':       0.0,
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -170,6 +177,8 @@ function! llama#disable()
     exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
 
     exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
+    exe "silent!  unmap          <Tab>"
+    exe "silent!  unmap          <Esc>"
 
     let s:llama_enabled = v:false
 
@@ -199,6 +208,7 @@ function! llama#setup()
     command! LlamaDisable        call llama#disable()
     command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
+    command! -range=% LlamaInstruct call llama#instruct(<line1>, <line2>)
 
     call llama#debug_setup()
 endfunction
@@ -229,6 +239,9 @@ function! llama#init()
     let s:t_last_move = reltime() " last time the cursor moved
 
     let s:current_job = v:null
+    let s:current_instruct_job = v:null
+    let s:instruct_requests = []
+    let s:instruct_request_id = 0
 
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
     let s:ghost_text_vim = has('textprop')
@@ -251,6 +264,231 @@ function! llama#init()
     if g:llama_config.enable_at_startup
         call llama#enable()
     endif
+endfunction
+
+function! llama#instruct(start, end)
+    let l:lines = getline(a:start, a:end)
+    let l:instruction = input('Instruction: ')
+    if empty(l:instruction)
+        return
+    endif
+    call llama#send_instruct(a:start, a:end, l:lines, l:instruction, function('s:instruct_callback', [a:start, a:end]))
+endfunction
+
+function! llama#send_instruct(start, end, lines, instruction, callback)
+    " Create request state
+    let l:request_id = s:instruct_request_id
+    let s:instruct_request_id += 1
+
+    let l:end = min([a:end, line('$')])
+
+    let l:req = {
+        \ 'id': l:request_id,
+        \ 'range': [a:start, l:end],
+        \ 'status': 'processing',
+        \ 'result': '',
+        \ 'job': v:null,
+        \ 'extmark': -1,
+        \ 'extmark_virt': -1,
+        \ }
+
+    call add(s:instruct_requests, l:req)
+
+    " Set extmark for highlighting
+    let l:bufnr = bufnr('%')
+    if s:ghost_text_nvim
+        let l:ns = nvim_create_namespace('llama_instruct')
+        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, a:start - 1, 0, {
+            \ 'end_row': l:end - 1,
+            \ 'end_col': len(getline(l:end)),
+            \ 'hl_group': 'llama_hl_instruct_processing'
+            \ })
+    endif
+
+    " Build the payload
+    let l:system_message = {'role': 'system', 'content': 'You are a code-editing assistant. Return ONLY the new content for the requested block.'}
+
+    let l:user_content = "--- instruction ------------------------------------------------\n" . a:instruction . "\n"
+    let l:user_content .= "--- range -------------------------------------------------------\n"
+    let l:user_content .= "start_line: " . a:start . "\n"
+    let l:user_content .= "end_line: " . a:end . "\n"
+    " TODO: add surrounding context and extra context
+    let l:user_content .= "--- selected block ---------------------------------------------\n"
+    let l:user_content .= join(a:lines, "\n") . "\n"
+    let l:user_content .= "--- end --------------------------------------------------------"
+
+    let l:user_message = {'role': 'user', 'content': l:user_content}
+
+    let l:messages = [l:system_message, l:user_message]
+
+    let l:request = {
+        \ 'model': g:llama_config.model_inst,
+        \ 'messages': l:messages,
+        \ 'temperature': g:llama_config.temperature_inst,
+        \ 'stream': v:false,
+        \ }
+
+    let l:curl_command = [
+        \ "curl",
+        \ "--silent",
+        \ "--no-buffer",
+        \ "--request", "POST",
+        \ "--url", g:llama_config.endpoint_inst,
+        \ "--header", "Content-Type: application/json",
+        \ "--data", "@-",
+        \ ]
+
+    if exists("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+        call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
+    endif
+
+    let l:request_json = json_encode(l:request)
+
+    if s:ghost_text_nvim
+        let l:req.job = jobstart(l:curl_command, {
+            \ 'on_stdout': function('s:instruct_on_response', [l:request_id, a:callback]),
+            \ 'on_exit': function('s:instruct_on_exit', [l:request_id, a:callback]),
+            \ 'stdout_buffered': v:true
+            \ })
+        call chansend(l:req.job, l:request_json)
+        call chanclose(l:req.job, 'stdin')
+    elseif s:ghost_text_vim
+        let l:req.job = job_start(l:curl_command, {
+            \ 'out_cb': function('s:instruct_on_response', [l:request_id, a:callback]),
+            \ 'exit_cb': function('s:instruct_on_exit', [l:request_id, a:callback])
+            \ })
+
+        let channel = job_getchannel(l:req.job)
+        call ch_sendraw(channel, l:request_json)
+        call ch_close_in(channel)
+    endif
+endfunction
+
+function! s:instruct_update_request(id, status)
+    for l:req in s:instruct_requests
+        if l:req.id == a:id
+            let l:req.status = a:status
+            if s:ghost_text_nvim
+                let l:ns = nvim_create_namespace('llama_instruct')
+                " Update highlight extmark
+                call nvim_buf_set_extmark(bufnr('%'), l:ns, l:req.range[0] - 1, 0, {
+                    \ 'id': l:req.extmark,
+                    \ 'end_row': l:req.range[1] - 1,
+                    \ 'end_col': len(getline(l:req.range[1])),
+                    \ 'hl_group': 'llama_hl_instruct_' . a:status
+                    \ })
+                if a:status == 'ready'
+                    " Create virtual text extmark one line above the end
+                    let l:result_lines = split(l:req.result, "\n")
+                    let l:req.extmark_virt = nvim_buf_set_extmark(bufnr('%'), l:ns, l:req.range[1] - 1, 0, {
+                        \ 'virt_lines': map(l:result_lines, {idx, val -> [[val, 'llama_hl_instruct_ready']]})
+                        \ })
+                endif
+            endif
+            break
+        endif
+    endfor
+endfunction
+
+function! s:instruct_on_response(id, callback, job_id, data, event = v:null)
+    call s:instruct_update_request(a:id, 'generating')
+
+    if s:ghost_text_nvim
+        let l:raw = join(a:data, "\n")
+    elseif s:ghost_text_vim
+        let l:raw = a:data
+    endif
+
+    if len(l:raw) == 0
+        return
+    endif
+
+    let l:content = ''
+    try
+        let l:response = json_decode(l:raw)
+        let l:content = get(l:response, 'choices', [{}])[0].message.content
+    catch
+        " Assume plain text response
+        let l:content = l:raw
+    endtry
+
+    " Store result
+    for l:req in s:instruct_requests
+        if l:req.id == a:id
+            let l:req.result = l:content
+            break
+        endif
+    endfor
+endfunction
+
+function! s:instruct_on_exit(id, callback, job_id, exit_code, event = v:null)
+    if a:exit_code != 0
+        echohl ErrorMsg
+        echo "Instruct job failed with exit code: " . a:exit_code
+        echohl None
+        call s:instruct_remove_request(a:id)
+        return
+    endif
+
+    call s:instruct_update_request(a:id, 'ready')
+endfunction
+
+function! s:instruct_remove_request(id)
+    for i in range(len(s:instruct_requests))
+        if s:instruct_requests[i].id == a:id
+            " Clear extmarks
+            if s:ghost_text_nvim
+                let l:ns = nvim_create_namespace('llama_instruct')
+                call nvim_buf_del_extmark(bufnr('%'), l:ns, s:instruct_requests[i].extmark)
+                if s:instruct_requests[i].extmark_virt != -1
+                    call nvim_buf_del_extmark(bufnr('%'), l:ns, s:instruct_requests[i].extmark_virt)
+                endif
+            endif
+            call remove(s:instruct_requests, i)
+            break
+        endif
+    endfor
+endfunction
+
+function! s:instruct_callback(start, end, result)
+    let l:result_lines = split(a:result, "\n", 1)
+    " Remove trailing empty lines
+    while len(l:result_lines) > 0 && l:result_lines[-1] == ""
+        call remove(l:result_lines, -1)
+    endwhile
+
+    let l:num_result = len(l:result_lines)
+    let l:num_original = a:end - a:start + 1
+
+    " Delete the original range
+    call deletebufline(bufnr('%'), a:start, a:end)
+
+    " Insert the new lines
+    call append(a:start - 1, l:result_lines)
+endfunction
+
+function! llama#instruct_accept()
+    let l:line = line('.')
+    for l:req in s:instruct_requests
+        if l:req.status == 'ready' && l:line >= l:req.range[0] && l:line <= l:req.range[1]
+            call s:instruct_callback(l:req.range[0], l:req.range[1], l:req.result)
+            call s:instruct_remove_request(l:req.id)
+            return
+        endif
+    endfor
+    " If not in range, do normal Tab
+    call feedkeys("\<Tab>", 'n')
+endfunction
+
+function! llama#instruct_cancel()
+    let l:line = line('.')
+    for l:req in s:instruct_requests
+        if l:line >= l:req.range[0] && l:line <= l:req.range[1]
+            call s:instruct_remove_request(l:req.id)
+            return
+        endif
+    endfor
+    " If not in range, do normal Esc (nothing)
 endfunction
 
 function! llama#setup_autocmds()
@@ -288,6 +526,8 @@ function! llama#enable()
     " setup keymaps
     exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
     exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
+    exe "nnoremap <silent> <Tab> :call llama#instruct_accept()<CR>"
+    exe "nnoremap <silent> <Esc> :call llama#instruct_cancel()<CR>"
 
     call llama#setup_autocmds()
 
@@ -1227,3 +1467,5 @@ endfunction
 function! llama#debug_setup() abort
     return llama_debug#setup()
 endfunction
+
+call llama#init()
