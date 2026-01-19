@@ -82,12 +82,11 @@ let s:default_config = {
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
     \ 'keymap_fim_accept_word': "<C-B>",
-    \ 'keymap_inst_trigger':    v:null,
+    \ 'keymap_inst_trigger':    "<C-I>",
     \ 'keymap_inst_accept':     "<Tab>",
     \ 'keymap_inst_cancel':     "<Esc>",
     \ 'keymap_debug_toggle':    v:null,
     \ 'enable_at_startup':      v:true,
-    \ 'timeout_inst':           60000,
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)

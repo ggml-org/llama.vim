@@ -14,6 +14,7 @@ Local LLM-assisted text completion.
 - Toggle the suggestion manually by pressing `Ctrl+F`
 - Accept a suggestion with `Tab`
 - Accept the first line of a suggestion with `Shift+Tab`
+- Instruction-based editing (instruct mode) with `Ctrl+I`
 - Control max text generation time
 - Configure scope of context around the cursor
 - Ring context with chunks from open and edited files and yanked text
@@ -83,9 +84,13 @@ Examples:
 
 4. Changing accept line keymap
 
+5. Configure instruction-based editing trigger keymap
+
     ```vim
-    let g:llama_config.keymap_accept_full = "<C-S>"
+    let g:llama_config.keymap_inst_trigger = "<C-I>"
     ```
+
+5. Configure instruction-based editing trigger keymap
 
 Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
 for the full list of options.

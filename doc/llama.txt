@@ -20,6 +20,7 @@ Default Shortcut
 - Shift+Tab - accept just the first line of the suggestion
 - Ctrl+B    - accept just the first word of the suggestion
 - Ctrl+F    - trigger FIM completion manually
+- Ctrl+I    - trigger instruction-based editing (instruct mode)
 
 ================================================================================
 Commands
@@ -96,9 +97,11 @@ variable.
 Currently the default config is:
 >vim
 		let s:default_config = {
-		    \ 'endpoint':               'http://127.0.0.1:8012/infill',
+		    \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
+		    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
 		    \ 'api_key':                '',
-		    \ 'model':                  '',
+		    \ 'model_fim':              '',
+		    \ 'model_inst':             '',
 		    \ 'n_prefix':               256,
 		    \ 'n_suffix':               64,
 		    \ 'n_predict':              128,
@@ -117,17 +120,21 @@ Currently the default config is:
 		    \ 'keymap_fim_accept_full': "<Tab>",
 		    \ 'keymap_fim_accept_line': "<S-Tab>",
 		    \ 'keymap_fim_accept_word': "<C-B>",
+		    \ 'keymap_inst_trigger':    v:null,
 		    \ 'keymap_debug_toggle':    v:null,
 		    \ 'enable_at_startup':      v:true,
 		    \ }
 <
 
-- {endpoint}			llama.cpp server endpoint
+- {endpoint_fim}		llama.cpp server endpoint for FIM completion
+
+- {endpoint_inst}		llama.cpp server endpoint for instruction completion
 
 - {api_key}				llama.cpp server api key (optional)
 
-- {model}				model name in case if multiple models are
-						loaded (optional)
+- {model_fim}			model name for FIM completion (optional)
+
+- {model_inst}			model name for instruction completion (optional)
 
 - {n_prefix}			number of lines before the cursor location to include
 						in the local prefix
@@ -183,6 +190,8 @@ keymaps parameters:
 - {keymap_fim_accept_line}	keymap to accept line suggestion, default: <S-Tab>
 
 - {keymap_fim_accept_word}	keymap to accept word suggestion, default: <C-B>
+
+- {keymap_inst_trigger}		keymap to trigger instruction-based editing, default: null
 
 - {keymap_debug_toggle}		keymap to toggle the debug pane, default: null
 
