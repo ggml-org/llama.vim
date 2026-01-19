@@ -443,6 +443,20 @@ function! s:pick_chunk(text, no_mod, do_evict)
     "let &statusline = 'extra context: ' . len(s:ring_chunks) . ' / ' . len(s:ring_queued)
 endfunction
 
+function! s:ring_get_extra()
+    " extra context
+    let l:extra = []
+    for l:chunk in s:ring_chunks
+        call add(l:extra, {
+            \ 'text':     l:chunk.str,
+            \ 'time':     l:chunk.time,
+            \ 'filename': l:chunk.filename
+            \ })
+    endfor
+
+    return l:extra
+endfunction
+
 " picks a queued chunk, sends it for processing and adds it to s:ring_chunks
 " called every g:llama_config.ring_update_ms
 function! s:ring_update()
@@ -467,21 +481,14 @@ function! s:ring_update()
     "let &statusline = 'updated context: ' . len(s:ring_chunks) . ' / ' . len(s:ring_queued)
 
     " send asynchronous job with the new extra context so that it is ready for the next FIM
-    let l:extra_context = []
-    for l:chunk in s:ring_chunks
-        call add(l:extra_context, {
-            \ 'text':     l:chunk.str,
-            \ 'time':     l:chunk.time,
-            \ 'filename': l:chunk.filename
-            \ })
-    endfor
+    let l:extra = s:ring_get_extra()
 
     " no samplers needed here
     let l:request = {
         \ 'id_slot':          0,
         \ 'input_prefix':     "",
         \ 'input_suffix':     "",
-        \ 'input_extra':      l:extra_context,
+        \ 'input_extra':      l:extra,
         \ 'prompt':           "",
         \ 'n_predict':        0,
         \ 'temperature':      0.0,
@@ -719,21 +726,13 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     "    endif
     "endfor
 
-    " prepare the extra context data
-    let l:extra_ctx = []
-    for l:chunk in s:ring_chunks
-        call add(l:extra_ctx, {
-            \ 'text':     l:chunk.str,
-            \ 'time':     l:chunk.time,
-            \ 'filename': l:chunk.filename
-            \ })
-    endfor
+    let l:extra = s:ring_get_extra()
 
     let l:request = {
         \ 'id_slot':          0,
         \ 'input_prefix':     l:prefix,
         \ 'input_suffix':     l:suffix,
-        \ 'input_extra':      l:extra_ctx,
+        \ 'input_extra':      l:extra,
         \ 'prompt':           l:middle,
         \ 'n_predict':        g:llama_config.n_predict,
         \ 'stop':             g:llama_config.stop_strings,
@@ -1265,8 +1264,11 @@ function! llama#inst_send(start, end, lines, inst, callback)
 
     let l:end = min([a:end, line('$')])
 
+    let l:bufnr = bufnr('%')
+
     let l:req = {
         \ 'id': l:request_id,
+        \ 'bufnr': l:bufnr,
         \ 'range': [a:start, l:end],
         \ 'status': 'proc',
         \ 'result': '',
@@ -1279,7 +1281,6 @@ function! llama#inst_send(start, end, lines, inst, callback)
     call add(s:inst_requests, l:req)
 
     " highlights the selected text
-    let l:bufnr = bufnr('%')
     if s:ghost_text_nvim
         let l:ns = nvim_create_namespace('vt_inst')
         let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, a:start - 1, 0, {
@@ -1300,20 +1301,11 @@ function! llama#inst_send(start, end, lines, inst, callback)
         \ 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'
         \ }
 
-    " extra context
-    " TODO: deduplicate
-    let l:extra_context = []
-    for l:chunk in s:ring_chunks
-        call add(l:extra_context, {
-            \ 'text':     l:chunk.str,
-            \ 'time':     l:chunk.time,
-            \ 'filename': l:chunk.filename
-            \ })
-    endfor
+    let l:extra = s:ring_get_extra()
 
     let l:user_content  = ""
     let l:user_content .= "--- context ----------------------------------------------------\n"
-    let l:user_content .= join(l:extra_context, "\n") . "\n"
+    let l:user_content .= join(l:extra, "\n") . "\n"
     let l:user_content .= "--- selection --------------------------------------------------\n"
     let l:user_content .= join(a:lines, "\n") . "\n"
     let l:user_content .= "--- instruction ------------------------------------------------\n"
@@ -1376,7 +1368,7 @@ function! llama#inst_send(start, end, lines, inst, callback)
 endfunction
 
 function! llama#inst_update_pos(req)
-    let l:bufnr = bufnr('%')
+    let l:bufnr = a:req.bufnr
     let l:ns    = nvim_create_namespace('vt_inst')
 
     let l:extmark_pos = nvim_buf_get_extmark_by_id(l:bufnr, l:ns, a:req.extmark, {})
@@ -1399,7 +1391,7 @@ function! s:inst_update(id, status)
                 let l:ns = nvim_create_namespace('vt_inst')
 
                 if l:req.extmark_virt != -1
-                    call nvim_buf_del_extmark(bufnr('%'), l:ns, l:req.extmark_virt)
+                    call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
                     let l:req.extmark_virt = -1
                 endif
 
@@ -1428,7 +1420,7 @@ function! s:inst_update(id, status)
                 endif
 
                 if !empty(l:virt_lines)
-                    let l:req.extmark_virt = nvim_buf_set_extmark(bufnr('%'), l:ns, l:req.range[1] - 1, 0, {
+                    let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
                         \ 'virt_lines': l:virt_lines
                         \ })
                 endif
@@ -1485,12 +1477,13 @@ endfunction
 
 function! s:inst_remove(id)
     for i in range(len(s:inst_requests))
-        if s:inst_requests[i].id == a:id
+        let l:req = s:inst_requests[i]
+        if l:req.id == a:id
             if s:ghost_text_nvim
                 let l:ns = nvim_create_namespace('vt_inst')
-                call nvim_buf_del_extmark(bufnr('%'), l:ns, s:inst_requests[i].extmark)
-                if s:inst_requests[i].extmark_virt != -1
-                    call nvim_buf_del_extmark(bufnr('%'), l:ns, s:inst_requests[i].extmark_virt)
+                call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark)
+                if l:req.extmark_virt != -1
+                    call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
                 endif
             endif
             call remove(s:inst_requests, i)
@@ -1499,7 +1492,7 @@ function! s:inst_remove(id)
     endfor
 endfunction
 
-function! s:inst_callback(start, end, result)
+function! s:inst_callback(bufnr, start, end, result)
     let l:result_lines = split(a:result, "\n", 1)
 
     " Remove trailing empty lines
@@ -1511,7 +1504,7 @@ function! s:inst_callback(start, end, result)
     let l:num_original = a:end - a:start + 1
 
     " Delete the original range
-    call deletebufline(bufnr('%'), a:start, a:end)
+    call deletebufline(a:bufnr, a:start, a:end)
 
     " Insert the new lines
     call append(a:start - 1, l:result_lines)
@@ -1525,7 +1518,7 @@ function! llama#inst_accept()
             call llama#inst_update_pos(l:req)
 
             if l:line >= l:req.range[0] && l:line <= l:req.range[1]
-                call s:inst_callback(l:req.range[0], l:req.range[1], l:req.result)
+                call s:inst_callback(l:req.bufnr, l:req.range[0], l:req.range[1], l:req.result)
                 call s:inst_remove(l:req.id)
                 return
             endif
