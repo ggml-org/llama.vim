@@ -45,6 +45,9 @@ Commands
 		Toggle autofim for this vim/nvim session
 		Equivalent to vimscript function: `llama#toggle_auto_fim()`
 
+*:LlamaInstruct*
+		Trigger instruction-based editing (instruct mode) on selected text
+
 *:LlamaDebugClear*
 		Clear the debug pane logs.
 		Equivalent to vimscript function: `debug#clear()`

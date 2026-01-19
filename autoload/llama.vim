@@ -1278,21 +1278,21 @@ function! llama#inst_send(start, end, lines, inst, callback)
 
     call add(s:inst_requests, l:req)
 
-     " highlights the selected text
-     let l:bufnr = bufnr('%')
-     if s:ghost_text_nvim
-         let l:ns = nvim_create_namespace('vt_inst')
-         let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, a:start - 1, 0, {
-             \ 'end_row': l:end - 1,
-             \ 'end_col': len(getline(l:end)),
-             \ 'hl_group': 'llama_hl_inst_src'
-             \ })
-     elseif s:ghost_text_vim
-         " TODO: implement classic Vim support
-     endif
+    " highlights the selected text
+    let l:bufnr = bufnr('%')
+    if s:ghost_text_nvim
+        let l:ns = nvim_create_namespace('vt_inst')
+        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, a:start - 1, 0, {
+            \ 'end_row': l:end - 1,
+            \ 'end_col': len(getline(l:end)),
+            \ 'hl_group': 'llama_hl_inst_src'
+            \ })
+    elseif s:ghost_text_vim
+        " TODO: implement classic Vim support
+    endif
 
-     " Initialize virtual text with processing status
-     call s:inst_update(l:request_id, 'proc')
+    " Initialize virtual text with processing status
+    call s:inst_update(l:request_id, 'proc')
 
     " Build the payload
     let l:system_message = {
@@ -1314,26 +1314,26 @@ function! llama#inst_send(start, end, lines, inst, callback)
     let l:user_content  = ""
     let l:user_content .= "--- context ----------------------------------------------------\n"
     let l:user_content .= join(l:extra_context, "\n") . "\n"
-    let l:user_content .= "--- instruction ------------------------------------------------\n"
-    let l:user_content .= a:inst . "\n"
     let l:user_content .= "--- selection --------------------------------------------------\n"
     let l:user_content .= join(a:lines, "\n") . "\n"
+    let l:user_content .= "--- instruction ------------------------------------------------\n"
+    let l:user_content .= a:inst . "\n"
     let l:user_content .= "--- result -----------------------------------------------------\n"
+
+    call llama#debug_log('inst_send | ' . a:inst, l:user_content)
 
     let l:user_message = {'role': 'user', 'content': l:user_content}
 
     let l:messages = [l:system_message, l:user_message]
 
     let l:request = {
-        \ 'model':        g:llama_config.model_inst,
+        \ 'id_slot':      0,
         \ 'messages':     l:messages,
         \ 'min_p':        0.1,
         \ 'samplers':     ["min_p"],
         \ 'stream':       v:false,
         \ 'cache_prompt': v:true,
         \ }
-
-    call llama#debug_log('inst_send | ' . a:inst, l:user_content)
 
     let l:curl_command = [
         \ "curl",
@@ -1344,6 +1344,10 @@ function! llama#inst_send(start, end, lines, inst, callback)
         \ "--header", "Content-Type: application/json",
         \ "--data", "@-",
         \ ]
+
+    if exists("g:llama_config.model_inst") && len("g:llama_config.model_inst") > 0
+        let l:request.model = g:llama_config.model_inst
+    endif
 
     if exists("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
