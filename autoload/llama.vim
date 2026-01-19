@@ -1247,8 +1247,81 @@ endfunction
 " Instruct-based editing
 " =====================================
 
+function! llama#inst_build(lines, inst)
+    let l:system_message = {
+        \ 'role': 'system',
+        \ 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'
+        \ }
+
+    let l:extra = s:ring_get_extra()
+
+    let l:user_content  = ""
+    let l:user_content .= "--- context ----------------------------------------------------\n"
+    let l:user_content .= join(l:extra, "\n") . "\n"
+    let l:user_content .= "--- selection --------------------------------------------------\n"
+    let l:user_content .= join(a:lines, "\n") . "\n"
+    let l:user_content .= "--- instruction ------------------------------------------------\n"
+
+    if !empty(a:inst)
+        let l:user_content .= a:inst . "\n"
+        let l:user_content .= "--- result -----------------------------------------------------\n"
+    endif
+
+    let l:user_message = {'role': 'user', 'content': l:user_content}
+
+    let l:messages = [l:system_message, l:user_message]
+
+    return l:messages
+endfunction
+
 function! llama#inst(start, end)
     let l:lines = getline(a:start, a:end)
+
+    " while the user is providing an instruction, send a warm-up request
+    let l:messages = llama#inst_build(l:lines, '')
+
+    let l:request = {
+        \ 'id_slot':      0,
+        \ 'messages':     l:messages,
+        \ 'samplers':     [],
+        \ 'n_predict':    0,
+        \ 'stream':       v:false,
+        \ 'cache_prompt': v:true,
+        \ 'response_fields':  [""],
+        \ }
+
+    let l:curl_command = [
+        \ "curl",
+        \ "--silent",
+        \ "--no-buffer",
+        \ "--request", "POST",
+        \ "--url", g:llama_config.endpoint_inst,
+        \ "--header", "Content-Type: application/json",
+        \ "--data", "@-",
+        \ ]
+
+    if exists("g:llama_config.model_inst") && len("g:llama_config.model_inst") > 0
+        let l:request.model = g:llama_config.model_inst
+    endif
+
+    if exists("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+        call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
+    endif
+
+    let l:request_json = json_encode(l:request)
+
+    " no callbacks because we don't need to process the response
+    if s:ghost_text_nvim
+        let jobid = jobstart(l:curl_command, {})
+        call chansend(jobid, l:request_json)
+        call chanclose(jobid, 'stdin')
+    elseif s:ghost_text_vim
+        let jobid = job_start(l:curl_command, {})
+        let channel = job_getchannel(jobid)
+        call ch_sendraw(channel, l:request_json)
+        call ch_close_in(channel)
+    endif
+
     let l:inst = input('Instruction: ')
     if empty(l:inst)
         return
@@ -1295,28 +1368,9 @@ function! llama#inst_send(start, end, lines, inst, callback)
     " Initialize virtual text with processing status
     call s:inst_update(l:request_id, 'proc')
 
-    " Build the payload
-    let l:system_message = {
-        \ 'role': 'system',
-        \ 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'
-        \ }
+    let l:messages = llama#inst_build(a:lines, a:inst)
 
-    let l:extra = s:ring_get_extra()
-
-    let l:user_content  = ""
-    let l:user_content .= "--- context ----------------------------------------------------\n"
-    let l:user_content .= join(l:extra, "\n") . "\n"
-    let l:user_content .= "--- selection --------------------------------------------------\n"
-    let l:user_content .= join(a:lines, "\n") . "\n"
-    let l:user_content .= "--- instruction ------------------------------------------------\n"
-    let l:user_content .= a:inst . "\n"
-    let l:user_content .= "--- result -----------------------------------------------------\n"
-
-    call llama#debug_log('inst_send | ' . a:inst, l:user_content)
-
-    let l:user_message = {'role': 'user', 'content': l:user_content}
-
-    let l:messages = [l:system_message, l:user_message]
+    call llama#debug_log('inst_send | ' . a:inst, join(l:messages, "\n"))
 
     let l:request = {
         \ 'id_slot':      0,
