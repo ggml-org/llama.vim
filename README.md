@@ -4,9 +4,15 @@ Local LLM-assisted text completion.
 
 <img width="485" alt="image" src="https://github.com/user-attachments/assets/a950e38c-3b3f-4c46-94fe-0d6e0f790fc6">
 
----
+#### Fill-in-Middle (FIM) completions
 
 ![llama vim-spec-1](https://github.com/user-attachments/assets/404ebc2a-e4b8-4119-999b-e5365ec3208d)
+
+#### Instruction-based editing
+
+https://github.com/user-attachments/assets/641a6e72-f1a2-4fe5-b0fd-c2597c6f4cdc
+
+---
 
 ## Features
 
@@ -14,6 +20,7 @@ Local LLM-assisted text completion.
 - Toggle the suggestion manually by pressing `Ctrl+F`
 - Accept a suggestion with `Tab`
 - Accept the first line of a suggestion with `Shift+Tab`
+- Instruction-based editing (instruct mode) with `Ctrl+I`
 - Control max text generation time
 - Configure scope of context around the cursor
 - Ring context with chunks from open and edited files and yanked text
@@ -83,16 +90,20 @@ Examples:
 
 4. Changing accept line keymap
 
+5. Configure instruction-based editing trigger keymap
+
     ```vim
-    let g:llama_config.keymap_accept_full = "<C-S>"
+    let g:llama_config.keymap_inst_trigger = "<C-I>"
     ```
+
+5. Configure instruction-based editing trigger keymap
 
 Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
 for the full list of options.
 
 ### llama.cpp setup
 
-The plugin requires a [llama.cpp](https://github.com/ggml-org/llama.cpp) server instance to be running at [`g:llama_config.endpoint`](https://github.com/ggml-org/llama.vim/blob/master/autoload/llama.vim#L37).
+The plugin requires a [llama.cpp](https://github.com/ggml-org/llama.cpp) server instance to be running at [`g:llama_config.endpoint_fim`](https://github.com/ggml-org/llama.vim/blob/master/autoload/llama.vim#L18) and/or [`g:llama_config.endpoint_inst`](https://github.com/ggml-org/llama.vim/blob/master/autoload/llama.vim#L19).
 
 #### Mac OS
 
