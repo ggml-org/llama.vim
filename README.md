@@ -103,7 +103,7 @@ for the full list of options.
 
 ### llama.cpp setup
 
-The plugin requires a [llama.cpp](https://github.com/ggml-org/llama.cpp) server instance to be running at [`g:llama_config.endpoint`](https://github.com/ggml-org/llama.vim/blob/master/autoload/llama.vim#L37).
+The plugin requires a [llama.cpp](https://github.com/ggml-org/llama.cpp) server instance to be running at [`g:llama_config.endpoint_fim`](https://github.com/ggml-org/llama.vim/blob/master/autoload/llama.vim#L18) and/or [`g:llama_config.endpoint_inst`](https://github.com/ggml-org/llama.vim/blob/master/autoload/llama.vim#L19).
 
 #### Mac OS
 
