@@ -4,9 +4,15 @@ Local LLM-assisted text completion.
 
 <img width="485" alt="image" src="https://github.com/user-attachments/assets/a950e38c-3b3f-4c46-94fe-0d6e0f790fc6">
 
----
+#### Fill-in-Middle (FIM) completions
 
 ![llama vim-spec-1](https://github.com/user-attachments/assets/404ebc2a-e4b8-4119-999b-e5365ec3208d)
+
+#### Instruction-based editing
+
+https://github.com/user-attachments/assets/641a6e72-f1a2-4fe5-b0fd-c2597c6f4cdc
+
+---
 
 ## Features
 
