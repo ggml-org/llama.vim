@@ -82,10 +82,12 @@ let s:default_config = {
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
     \ 'keymap_fim_accept_word': "<C-B>",
-    \ 'keymap_debug_toggle':    v:null,
     \ 'keymap_inst_trigger':    v:null,
+    \ 'keymap_inst_accept':     "<Tab>",
+    \ 'keymap_inst_cancel':     "<Esc>",
+    \ 'keymap_debug_toggle':    v:null,
     \ 'enable_at_startup':      v:true,
-    \ 'timeout_inst':           30000,
+    \ 'timeout_inst':           60000,
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -190,8 +192,8 @@ function! llama#disable()
 
     exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
     exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
-    exe "silent!  unmap          <Tab>"
-    exe "silent!  unmap          <Esc>"
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
 
     let s:llama_enabled = v:false
 
@@ -315,10 +317,10 @@ function! llama#enable()
     " setup keymaps
     exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
     exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
-    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger .. " :LlamaInstruct<CR>"
 
-    exe "nnoremap <silent> <Tab> :call llama#inst_accept()<CR>"
-    exe "nnoremap <silent> <Esc> :call llama#inst_cancel()<CR>"
+    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger .. " :LlamaInstruct<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept  .. " :call llama#inst_accept()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel  .. " :call llama#inst_cancel()<CR>"
 
     call llama#setup_autocmds()
 
@@ -484,8 +486,8 @@ function! s:ring_update()
         \ 'prompt':           "",
         \ 'n_predict':        0,
         \ 'temperature':      0.0,
-        \ 'stream':           v:false,
         \ 'samplers':         [],
+        \ 'stream':           v:false,
         \ 'cache_prompt':     v:true,
         \ 't_max_prompt_ms':  1,
         \ 't_max_predict_ms': 1,
@@ -739,8 +741,8 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ 'n_indent':         l:indent,
         \ 'top_k':            40,
         \ 'top_p':            0.90,
-        \ 'stream':           v:false,
         \ 'samplers':         ["top_k", "top_p", "infill"],
+        \ 'stream':           v:false,
         \ 'cache_prompt':     v:true,
         \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
         \ 't_max_predict_ms': l:t_max_predict_ms,
@@ -1253,6 +1255,7 @@ function! llama#inst(start, end)
     if empty(l:inst)
         return
     endif
+
     call llama#inst_send(a:start, a:end, l:lines, l:inst, function('s:inst_callback', [a:start, a:end]))
 endfunction
 
@@ -1268,7 +1271,7 @@ function! llama#inst_send(start, end, lines, inst, callback)
         \ 'range': [a:start, l:end],
         \ 'status': 'proc',
         \ 'result': '',
-        \ 'instruction': a:inst,
+        \ 'inst': a:inst,
         \ 'job': v:null,
         \ 'extmark': -1,
         \ 'extmark_virt': -1,
@@ -1293,7 +1296,10 @@ function! llama#inst_send(start, end, lines, inst, callback)
      call s:inst_update(l:request_id, 'proc')
 
     " Build the payload
-    let l:system_message = {'role': 'system', 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'}
+    let l:system_message = {
+        \ 'role': 'system',
+        \ 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'
+        \ }
 
     " extra context
     " TODO: deduplicate
@@ -1320,10 +1326,12 @@ function! llama#inst_send(start, end, lines, inst, callback)
     let l:messages = [l:system_message, l:user_message]
 
     let l:request = {
-        \ 'model': g:llama_config.model_inst,
-        \ 'messages': l:messages,
-        \ 'temperature': 0.0,
-        \ 'stream': v:false,
+        \ 'model':        g:llama_config.model_inst,
+        \ 'messages':     l:messages,
+        \ 'min_p':        0.1,
+        \ 'samplers':     ["min_p"],
+        \ 'stream':       v:false,
+        \ 'cache_prompt': v:true,
         \ }
 
     call llama#debug_log('inst_send | ' . a:inst, l:user_content)
@@ -1364,45 +1372,63 @@ function! llama#inst_send(start, end, lines, inst, callback)
     endif
 endfunction
 
+function! llama#inst_update_pos(req)
+    let l:bufnr = bufnr('%')
+    let l:ns    = nvim_create_namespace('vt_inst')
+
+    let l:extmark_pos = nvim_buf_get_extmark_by_id(l:bufnr, l:ns, a:req.extmark, {})
+    if empty(l:extmark_pos)
+        continue
+    endif
+
+    let l:extmark_line = l:extmark_pos[0] + 1
+    let a:req.range[1] = l:extmark_line + a:req.range[1] - a:req.range[0]
+    let a:req.range[0] = l:extmark_line
+endfunction
+
 function! s:inst_update(id, status)
     for l:req in s:inst_requests
         if l:req.id == a:id
             let l:req.status = a:status
-             if s:ghost_text_nvim
-                 let l:ns = nvim_create_namespace('vt_inst')
-                 " Clear existing virtual text extmark if it exists
-                 if l:req.extmark_virt != -1
-                     call nvim_buf_del_extmark(bufnr('%'), l:ns, l:req.extmark_virt)
-                     let l:req.extmark_virt = -1
-                 endif
-                 " Create virtual text extmark
-                 let l:virt_lines = []
-                 let l:separator = '====================================='
-                 if a:status == 'ready'
-                     let l:result_lines = split(l:req.result, "\n")
-                     let l:virt_lines = [[[l:separator, 'llama_hl_inst_virt_ready']]] + map(l:result_lines, {idx, val -> [[val, 'llama_hl_inst_virt_ready']]})
-                 elseif a:status == 'proc'
-                     let l:instruction_truncated = l:req.instruction
-                     if len(l:instruction_truncated) > 64
-                         let l:instruction_truncated = l:instruction_truncated[:63] . '...'
-                     endif
-                     let l:virt_lines = [
-                         \ [[l:separator, 'llama_hl_inst_virt_proc']],
-                         \ [[printf('(%s) Processing ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_proc']],
-                         \ [['Instruction: ' . l:instruction_truncated, 'llama_hl_inst_virt_proc']]
-                         \ ]
-                 elseif a:status == 'gen'
-                     let l:virt_lines = [
-                         \ [[l:separator, 'llama_hl_inst_virt_gen']],
-                         \ [[printf('(%s) Generating ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_gen']]
-                         \ ]
-                 endif
+            call llama#inst_update_pos(l:req)
 
-                 if !empty(l:virt_lines)
-                     let l:req.extmark_virt = nvim_buf_set_extmark(bufnr('%'), l:ns, l:req.range[1] - 1, 0, {
-                         \ 'virt_lines': l:virt_lines
-                         \ })
-                 endif
+            if s:ghost_text_nvim
+                let l:ns = nvim_create_namespace('vt_inst')
+
+                if l:req.extmark_virt != -1
+                    call nvim_buf_del_extmark(bufnr('%'), l:ns, l:req.extmark_virt)
+                    let l:req.extmark_virt = -1
+                endif
+
+                let l:inst_trunc = l:req.inst
+                if len(l:inst_trunc) > 64
+                    let l:inst_trunc = l:inst_trunc[:63] . '...'
+                endif
+
+                let l:virt_lines = []
+                let l:separator = '====================================='
+                if a:status == 'ready'
+                    let l:result_lines = split(l:req.result, "\n")
+                    let l:virt_lines = [[[l:separator, 'llama_hl_inst_virt_ready']]] + map(l:result_lines, {idx, val -> [[val, 'llama_hl_inst_virt_ready']]})
+                elseif a:status == 'proc'
+                    let l:virt_lines = [
+                        \ [[l:separator, 'llama_hl_inst_virt_proc']],
+                        \ [[printf('(%s) Processing ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_proc']],
+                        \ [['Instruction: ' . l:inst_trunc, 'llama_hl_inst_virt_proc']]
+                        \ ]
+                elseif a:status == 'gen'
+                    let l:virt_lines = [
+                        \ [[l:separator, 'llama_hl_inst_virt_gen']],
+                        \ [[printf('(%s) Generating ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_gen']],
+                        \ [['Instruction: ' . l:inst_trunc, 'llama_hl_inst_virt_gen']]
+                        \ ]
+                endif
+
+                if !empty(l:virt_lines)
+                    let l:req.extmark_virt = nvim_buf_set_extmark(bufnr('%'), l:ns, l:req.range[1] - 1, 0, {
+                        \ 'virt_lines': l:virt_lines
+                        \ })
+                endif
             elseif s:ghost_text_vim
                 " TODO: implement classic Vim support
             endif
@@ -1457,7 +1483,6 @@ endfunction
 function! s:inst_remove(id)
     for i in range(len(s:inst_requests))
         if s:inst_requests[i].id == a:id
-            " Clear extmarks
             if s:ghost_text_nvim
                 let l:ns = nvim_create_namespace('vt_inst')
                 call nvim_buf_del_extmark(bufnr('%'), l:ns, s:inst_requests[i].extmark)
@@ -1473,6 +1498,7 @@ endfunction
 
 function! s:inst_callback(start, end, result)
     let l:result_lines = split(a:result, "\n", 1)
+
     " Remove trailing empty lines
     while len(l:result_lines) > 0 && l:result_lines[-1] == ""
         call remove(l:result_lines, -1)
@@ -1490,20 +1516,27 @@ endfunction
 
 function! llama#inst_accept()
     let l:line = line('.')
+
     for l:req in s:inst_requests
-        if l:req.status == 'ready' && l:line >= l:req.range[0] && l:line <= l:req.range[1]
-            call s:inst_callback(l:req.range[0], l:req.range[1], l:req.result)
-            call s:inst_remove(l:req.id)
-            return
+        if l:req.status ==# 'ready'
+            call llama#inst_update_pos(l:req)
+
+            if l:line >= l:req.range[0] && l:line <= l:req.range[1]
+                call s:inst_callback(l:req.range[0], l:req.range[1], l:req.result)
+                call s:inst_remove(l:req.id)
+                return
+            endif
         endif
     endfor
-    " If not in range, do normal Tab
+
     call feedkeys("\<Tab>", 'n')
 endfunction
 
 function! llama#inst_cancel()
     let l:line = line('.')
     for l:req in s:inst_requests
+        call llama#inst_update_pos(l:req)
+
         if l:line >= l:req.range[0] && l:line <= l:req.range[1]
             call s:inst_remove(l:req.id)
             return
