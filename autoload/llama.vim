@@ -85,6 +85,7 @@ let s:default_config = {
     \ 'keymap_inst_trigger':    "<C-I>",
     \ 'keymap_inst_accept':     "<Tab>",
     \ 'keymap_inst_cancel':     "<Esc>",
+    \ 'keymap_inst_continue':   "<C-Tab>",
     \ 'keymap_debug_toggle':    v:null,
     \ 'enable_at_startup':      v:true,
     \ }
@@ -193,6 +194,7 @@ function! llama#disable()
     exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
     exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
     exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
 
     let s:llama_enabled = v:false
 
@@ -256,7 +258,7 @@ function! llama#init()
     let s:current_job_fim  = v:null
 
     let s:inst_requests = []
-    let s:inst_request_id = 0
+    let s:inst_req_id = 0
 
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
     let s:ghost_text_vim = has('textprop')
@@ -320,6 +322,7 @@ function! llama#enable()
     exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger .. " :LlamaInstruct<CR>"
     exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept  .. " :call llama#inst_accept()<CR>"
     exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel  .. " :call llama#inst_cancel()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
 
     call llama#setup_autocmds()
 
@@ -1247,29 +1250,41 @@ endfunction
 " Instruct-based editing
 " =====================================
 
-function! llama#inst_build(lines, inst)
-    let l:system_message = {
-        \ 'role': 'system',
-        \ 'content': 'You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators.'
-        \ }
+function! llama#inst_build(lines, inst, inst_prev = [])
+    if !empty(a:inst_prev)
+        let l:messages = copy(a:inst_prev)
+    else
+        let l:system_prompt  = ""
+        let l:system_prompt .= "You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators.\n"
 
-    let l:extra = s:ring_get_extra()
+        let l:extra = s:ring_get_extra()
+
+        let l:system_prompt .= "\n"
+        let l:system_prompt .= "--- CONTEXT   --------------------------------------------------\n"
+        let l:system_prompt .= join(l:extra, "\n") . "\n"
+        let l:system_prompt .= "--- END       --------------------------------------------------\n"
+        let l:system_prompt .= "\n"
+        let l:system_prompt .= "--- SELECTION --------------------------------------------------\n"
+        let l:system_prompt .= join(a:lines, "\n") . "\n"
+        let l:system_prompt .= "--- END       --------------------------------------------------\n"
+
+        let l:system_message = {
+            \ 'role': 'system',
+            \ 'content': l:system_prompt,
+            \ }
+
+        let l:messages = [l:system_message]
+    endif
 
     let l:user_content  = ""
-    let l:user_content .= "--- CONTEXT ----------------------------------------------------\n"
-    let l:user_content .= join(l:extra, "\n") . "\n"
-    let l:user_content .= "--- SELECTION --------------------------------------------------\n"
-    let l:user_content .= join(a:lines, "\n") . "\n"
-    let l:user_content .= "--- END --------------------------------------------------------\n"
 
     if !empty(a:inst)
-        let l:user_content .= "\n"
         let l:user_content .= "INSTRUCTION: " . a:inst
     endif
 
     let l:user_message = {'role': 'user', 'content': l:user_content}
 
-    let l:messages = [l:system_message, l:user_message]
+    call add(l:messages, l:user_message)
 
     return l:messages
 endfunction
@@ -1327,25 +1342,25 @@ function! llama#inst(start, end)
         return
     endif
 
-    call llama#inst_send(a:start, a:end, l:lines, l:inst, function('s:inst_callback', [a:start, a:end]))
-endfunction
+    call llama#debug_log('inst_send | ' . l:inst)
 
-function! llama#inst_send(start, end, lines, inst, callback)
     " Create request state
-    let l:request_id = s:inst_request_id
-    let s:inst_request_id += 1
+    let l:req_id = s:inst_req_id
+    let s:inst_req_id += 1
 
+    let l:start = a:start
     let l:end = min([a:end, line('$')])
 
     let l:bufnr = bufnr('%')
 
     let l:req = {
-        \ 'id': l:request_id,
+        \ 'id': l:req_id,
         \ 'bufnr': l:bufnr,
-        \ 'range': [a:start, l:end],
+        \ 'range': [l:start, l:end],
         \ 'status': 'proc',
         \ 'result': '',
-        \ 'inst': a:inst,
+        \ 'inst': l:inst,
+        \ 'inst_prev': [],
         \ 'job': v:null,
         \ 'n_gen': 0,
         \ 'extmark': -1,
@@ -1357,7 +1372,7 @@ function! llama#inst_send(start, end, lines, inst, callback)
     " highlights the selected text
     if s:ghost_text_nvim
         let l:ns = nvim_create_namespace('vt_inst')
-        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, a:start - 1, 0, {
+        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, l:start - 1, 0, {
             \ 'end_row': l:end - 1,
             \ 'end_col': len(getline(l:end)),
             \ 'hl_group': 'llama_hl_inst_src'
@@ -1367,15 +1382,21 @@ function! llama#inst_send(start, end, lines, inst, callback)
     endif
 
     " Initialize virtual text with processing status
-    call s:inst_update(l:request_id, 'proc')
+    call s:inst_update(l:req_id, 'proc')
 
-    let l:messages = llama#inst_build(a:lines, a:inst)
+    let l:messages = llama#inst_build(l:lines, l:inst)
 
-    call llama#debug_log('inst_send | ' . a:inst, join(l:messages, "\n"))
+    let l:req.inst_prev = l:messages
+
+    call llama#inst_send(l:req_id, l:messages, function('s:inst_callback', [l:start, l:end]))
+endfunction
+
+function! llama#inst_send(req_id, messages, callback)
+    call llama#debug_log('inst_send', join(a:messages, "\n"))
 
     let l:request = {
         \ 'id_slot':      0,
-        \ 'messages':     l:messages,
+        \ 'messages':     a:messages,
         \ 'min_p':        0.1,
         \ 'temperature':  0.1,
         \ 'samplers':     ["min_p", "temp"],
@@ -1403,18 +1424,20 @@ function! llama#inst_send(start, end, lines, inst, callback)
 
     let l:request_json = json_encode(l:request)
 
+    let l:req = s:inst_requests[a:req_id]
+
     if s:ghost_text_nvim
         let l:req.job = jobstart(l:curl_command, {
-            \ 'on_stdout': function('s:inst_on_response', [l:request_id, a:callback]),
-            \ 'on_exit':   function('s:inst_on_exit',     [l:request_id, a:callback]),
+            \ 'on_stdout': function('s:inst_on_response', [a:req_id, a:callback]),
+            \ 'on_exit':   function('s:inst_on_exit',     [a:req_id, a:callback]),
             \ 'stdout_buffered': v:false
             \ })
         call chansend(l:req.job, l:request_json)
         call chanclose(l:req.job, 'stdin')
     elseif s:ghost_text_vim
         let l:req.job = job_start(l:curl_command, {
-            \ 'out_cb':  function('s:inst_on_response', [l:request_id, a:callback]),
-            \ 'exit_cb': function('s:inst_on_exit',     [l:request_id, a:callback])
+            \ 'out_cb':  function('s:inst_on_response', [a:req_id, a:callback]),
+            \ 'exit_cb': function('s:inst_on_exit',     [a:req_id, a:callback])
             \ })
 
         let channel = job_getchannel(l:req.job)
@@ -1549,6 +1572,14 @@ function! s:inst_on_exit(id, callback, job_id, exit_code, event = v:null)
     endif
 
     call s:inst_update(a:id, 'ready')
+
+    " Add assistant response to messages for continuation
+    for l:req in s:inst_requests
+        if l:req.id == a:id
+            call add(l:req.inst_prev, {'role': 'assistant', 'content': l:req.result})
+            break
+        endif
+    endfor
 endfunction
 
 function! s:inst_remove(id)
@@ -1615,6 +1646,36 @@ function! llama#inst_cancel()
         endif
     endfor
     " If not in range, do normal Esc (nothing)
+endfunction
+
+function! llama#inst_continue()
+    let l:lnum = line('.')
+    for l:req in s:inst_requests
+        call llama#inst_update_pos(l:req)
+
+        if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
+            let l:lines = getline(l:req.range[0], l:req.range[1])
+            let l:inst = input('Next instruction: ')
+            if empty(l:inst)
+                return
+            endif
+
+            call llama#debug_log('inst_continue | ' . l:inst)
+
+            let l:req.result = ''
+            let l:req.status = 'proc'
+            let l:req.inst = l:inst
+            let l:req.n_gen = 0
+
+            call s:inst_update(l:req.id, 'proc')
+
+            let l:messages = llama#inst_build(l:lines, l:inst, l:req.inst_prev)
+
+            call llama#inst_send(l:req.id, l:messages, function('s:inst_callback', [l:req.range[0], l:req.range[1]]))
+            return
+        endif
+    endfor
+    " If not in active edit, do nothing
 endfunction
 
 " =====================================
