@@ -1250,21 +1250,21 @@ endfunction
 function! llama#inst_build(lines, inst)
     let l:system_message = {
         \ 'role': 'system',
-        \ 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'
+        \ 'content': 'You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators.'
         \ }
 
     let l:extra = s:ring_get_extra()
 
     let l:user_content  = ""
-    let l:user_content .= "--- context ----------------------------------------------------\n"
+    let l:user_content .= "--- CONTEXT ----------------------------------------------------\n"
     let l:user_content .= join(l:extra, "\n") . "\n"
-    let l:user_content .= "--- selection --------------------------------------------------\n"
+    let l:user_content .= "--- SELECTION --------------------------------------------------\n"
     let l:user_content .= join(a:lines, "\n") . "\n"
-    let l:user_content .= "--- instruction ------------------------------------------------\n"
+    let l:user_content .= "--- END --------------------------------------------------------\n"
 
     if !empty(a:inst)
-        let l:user_content .= a:inst . "\n"
-        let l:user_content .= "--- result -----------------------------------------------------\n"
+        let l:user_content .= "\n"
+        let l:user_content .= "INSTRUCTION: " . a:inst
     endif
 
     let l:user_message = {'role': 'user', 'content': l:user_content}
@@ -1347,6 +1347,7 @@ function! llama#inst_send(start, end, lines, inst, callback)
         \ 'result': '',
         \ 'inst': a:inst,
         \ 'job': v:null,
+        \ 'n_gen': 0,
         \ 'extmark': -1,
         \ 'extmark_virt': -1,
         \ }
@@ -1376,8 +1377,9 @@ function! llama#inst_send(start, end, lines, inst, callback)
         \ 'id_slot':      0,
         \ 'messages':     l:messages,
         \ 'min_p':        0.1,
-        \ 'samplers':     ["min_p"],
-        \ 'stream':       v:false,
+        \ 'temperature':  0.1,
+        \ 'samplers':     ["min_p", "temp"],
+        \ 'stream':       v:true,
         \ 'cache_prompt': v:true,
         \ }
 
@@ -1405,7 +1407,7 @@ function! llama#inst_send(start, end, lines, inst, callback)
         let l:req.job = jobstart(l:curl_command, {
             \ 'on_stdout': function('s:inst_on_response', [l:request_id, a:callback]),
             \ 'on_exit':   function('s:inst_on_exit',     [l:request_id, a:callback]),
-            \ 'stdout_buffered': v:true
+            \ 'stdout_buffered': v:false
             \ })
         call chansend(l:req.job, l:request_json)
         call chanclose(l:req.job, 'stdin')
@@ -1450,30 +1452,44 @@ function! s:inst_update(id, status)
                 endif
 
                 let l:inst_trunc = l:req.inst
-                if len(l:inst_trunc) > 64
-                    let l:inst_trunc = l:inst_trunc[:63] . '...'
+                if len(l:inst_trunc) > 128
+                    let l:inst_trunc = l:inst_trunc[:127] . '...'
                 endif
 
+                let l:hl = ''
+                let l:sep = '====================================='
+
                 let l:virt_lines = []
-                let l:separator = '====================================='
                 if a:status == 'ready'
                     let l:result_lines = split(l:req.result, "\n")
-                    let l:virt_lines = [[[l:separator, 'llama_hl_inst_virt_ready']]] + map(l:result_lines, {idx, val -> [[val, 'llama_hl_inst_virt_ready']]})
+
+                    let l:hl = 'llama_hl_inst_virt_ready'
+                    let l:virt_lines = [[[l:sep, l:hl]]] + map(l:result_lines, {idx, val -> [[val, l:hl]]})
                 elseif a:status == 'proc'
+                    let l:hl = 'llama_hl_inst_virt_proc'
                     let l:virt_lines = [
-                        \ [[l:separator, 'llama_hl_inst_virt_proc']],
-                        \ [[printf('(%s) Processing ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_proc']],
-                        \ [['Instruction: ' . l:inst_trunc, 'llama_hl_inst_virt_proc']]
+                        \ [[l:sep, l:hl]],
+                        \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst), l:hl]],
+                        \ [[printf('Instruction: %s', l:inst_trunc),                 l:hl]],
+                        \ [[printf('Processing ...'),                                l:hl]]
                         \ ]
                 elseif a:status == 'gen'
+                    let l:preview = substitute(l:req.result, '.*\n\s*', '', '')
+                    if len(l:req.result) == 0
+                        let l:preview = '[thinking]'
+                    endif
+
+                    let l:hl = 'llama_hl_inst_virt_gen'
                     let l:virt_lines = [
-                        \ [[l:separator, 'llama_hl_inst_virt_gen']],
-                        \ [[printf('(%s) Generating ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_gen']],
-                        \ [['Instruction: ' . l:inst_trunc, 'llama_hl_inst_virt_gen']]
+                        \ [[l:sep, l:hl]],
+                        \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst),        l:hl]],
+                        \ [[printf('Instruction: %s', l:inst_trunc),                        l:hl]],
+                        \ [[printf('Generating:  %4d tokens | %s', l:req.n_gen, l:preview), l:hl]],
                         \ ]
                 endif
 
                 if !empty(l:virt_lines)
+                    let l:virt_lines = l:virt_lines + [[[l:sep, l:hl]]]
                     let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
                         \ 'virt_lines': l:virt_lines
                         \ })
@@ -1501,17 +1517,23 @@ function! s:inst_on_response(id, callback, job_id, data, event = v:null)
 
     let l:content = ''
     try
+        if len(l:raw) > 5 && l:raw[:5] ==# 'data: '
+            let l:raw = l:raw[6:]
+        endif
+
         let l:response = json_decode(l:raw)
-        let l:content = get(l:response, 'choices', [{}])[0].message.content
+        let l:content = get(l:response, 'choices', [{}])[0].delta.content
     catch
-        " Assume plain text response
-        let l:content = l:raw
+        let l:content = v:null
     endtry
 
     " Store result
     for l:req in s:inst_requests
         if l:req.id == a:id
-            let l:req.result = l:content
+            if !empty(l:content)
+                let l:req.result .= l:content
+            endif
+            let l:req.n_gen = l:req.n_gen + 1
             break
         endif
     endfor
