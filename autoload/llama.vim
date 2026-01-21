@@ -1424,7 +1424,13 @@ function! llama#inst_send(req_id, messages, callback)
 
     let l:request_json = json_encode(l:request)
 
-    let l:req = s:inst_requests[a:req_id]
+    let l:req = v:null
+    for l:r in s:inst_requests
+        if l:r.id == a:req_id
+            let l:req = l:r
+            break
+        endif
+    endfor
 
     if s:ghost_text_nvim
         let l:req.job = jobstart(l:curl_command, {
