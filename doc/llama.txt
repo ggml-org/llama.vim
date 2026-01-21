@@ -242,20 +242,20 @@ Example:
 		}
 <
 To adjust the colors for hint and info texts, `llama.vim` provides the
-highlight group `llama_hl_hint` and `llama_hl_info`. You can modify these
+highlight group `llama_hl_fim_hint` and `llama_hl_fim_info`. You can modify these
 groups using the normal way.
 
 Example:
 
 vimscript:
 >vim
-		highlight llama_hl_hint guifg=#f8732e ctermfg=209
-		highlight llama_hl_info guifg=#50fa7b ctermfg=119
+		highlight llama_hl_fim_hint guifg=#f8732e ctermfg=209
+		highlight llama_hl_fim_info guifg=#50fa7b ctermfg=119
 <
 lua:
 >lua
-		vim.api.nvim_set_hl(0, "llama_hl_hint", {fg = "#f8732e", ctermfg=209})
-		vim.api.nvim_set_hl(0, "llama_hl_info", {fg = "#50fa7b", ctermfg=119})
+		vim.api.nvim_set_hl(0, "llama_hl_fim_hint", {fg = "#f8732e", ctermfg=209})
+		vim.api.nvim_set_hl(0, "llama_hl_fim_info", {fg = "#50fa7b", ctermfg=119})
 <
 
 ================================================================================
