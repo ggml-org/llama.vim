@@ -347,23 +347,31 @@ endfunction
 
 " compute how similar two chunks of text are
 " 0 - no similarity, 1 - high similarity
-" TODO: figure out something better
 function! s:chunk_sim(c0, c1)
-    let l:lines0 = len(a:c0)
-    let l:lines1 = len(a:c1)
+    let l:tokens0 = split(join(a:c0, "\n"), '\W\+')
+    let l:tokens1 = split(join(a:c1, "\n"), '\W\+')
 
-    let l:common = 0
-
-    for l:line0 in a:c0
-        for l:line1 in a:c1
-            if l:line0 == l:line1
-                let l:common += 1
-                break
-            endif
-        endfor
+    let l:set0 = {}
+    for l:tok in l:tokens0
+        let l:set0[l:tok] = 1
     endfor
 
-    return 2.0 * l:common / (l:lines0 + l:lines1)
+    let l:common = 0
+    for l:tok in l:tokens1
+        if has_key(l:set0, l:tok)
+            let l:common += 1
+        endif
+    endfor
+
+    if (len(l:tokens0) + len(l:tokens1)) == 0
+        let l:res = 1.0
+    else
+        let l:res = 2.0 * l:common / (len(l:tokens0) + len(l:tokens1))
+    endif
+
+    "call llama#debug_log('chunk_sim: ' . l:res, join(a:c0, "\n") . '\n\n====================\n\n' . join(a:c1, "\n"))
+
+    return l:res
 endfunction
 
 " pick a random chunk of size g:llama_config.ring_chunk_size from the provided text and queue it for processing
@@ -729,12 +737,12 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
 
     " evict chunks that are very similar to the current context
     " this is needed because such chunks usually distort the completion to repeat what was already there
-    "for i in range(len(s:ring_chunks) - 1, 0, -1)
-    "    if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
-    "        call remove(s:ring_chunks, i)
-    "        let s:ring_n_evict += 1
-    "    endif
-    "endfor
+    for i in range(len(s:ring_chunks) - 1, 0, -1)
+        if s:chunk_sim(s:ring_chunks[i].data, l:chunk) > 0.5
+            call remove(s:ring_chunks, i)
+            let s:ring_n_evict += 1
+        endif
+    endfor
 
     let l:extra = s:ring_get_extra()
 
