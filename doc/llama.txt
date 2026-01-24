@@ -11,16 +11,21 @@ Requires:
 - curl
 - llama.cpp server instance
 - FIM-compatible model
-
+- Instruct-compatible model
 
 ================================================================================
 Default Shortcut
 
-- Tab       - accept the current suggestion
-- Shift+Tab - accept just the first line of the suggestion
-- Ctrl+B    - accept just the first word of the suggestion
-- Ctrl+F    - trigger FIM completion manually
-- Ctrl+I    - trigger instruction-based editing (instruct mode)
+- Tab         - accept the current suggestion
+- Shift+Tab   - accept just the first line of the suggestion
+- <leader>ll] - accept just the first word of the suggestion
+- <leader>llf - trigger FIM completion manually
+- <leader>lli - trigger instruction-based editing (instruct mode)
+- <leader>llr - rerun the instruction
+- <leader>llc - continue the instruction
+- <leader>llr - accept the instruction (accept the instruction)
+- <leader>llq - cancel the instruction (cancel the instruction)
+- <leader>lld - toggle the debug pane
 
 ================================================================================
 Commands
@@ -102,9 +107,9 @@ Currently the default config is:
 		let s:default_config = {
 		    \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
 		    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
-		    \ 'api_key':                '',
 		    \ 'model_fim':              '',
 		    \ 'model_inst':             '',
+		    \ 'api_key':                '',
 		    \ 'n_prefix':               256,
 		    \ 'n_suffix':               64,
 		    \ 'n_predict':              128,
@@ -119,12 +124,16 @@ Currently the default config is:
 		    \ 'ring_chunk_size':        64,
 		    \ 'ring_scope':             1024,
 		    \ 'ring_update_ms':         1000,
-		    \ 'keymap_fim_trigger':     "<C-F>",
+		    \ 'keymap_fim_trigger':     "<leader>llf",
 		    \ 'keymap_fim_accept_full': "<Tab>",
 		    \ 'keymap_fim_accept_line': "<S-Tab>",
-		    \ 'keymap_fim_accept_word': "<C-B>",
-		    \ 'keymap_inst_trigger':    v:null,
-		    \ 'keymap_debug_toggle':    v:null,
+		    \ 'keymap_fim_accept_word': "<leader>ll]",
+		    \ 'keymap_inst_trigger':    "<leader>lli",
+		    \ 'keymap_inst_rerun':      "<leader>llr",
+		    \ 'keymap_inst_continue':   "<leader>llc",
+		    \ 'keymap_inst_accept':     "<Tab>",
+		    \ 'keymap_inst_cancel':     "<Esc>",
+		    \ 'keymap_debug_toggle':    "<leader>lld",
 		    \ 'enable_at_startup':      v:true,
 		    \ }
 <
@@ -136,8 +145,10 @@ Currently the default config is:
 - {api_key}				llama.cpp server api key (optional)
 
 - {model_fim}			model name for FIM completion (optional)
+						recommended: Qwen3 Coder 30B
 
 - {model_inst}			model name for instruction completion (optional)
+						recommended: gpt-oss-120b
 
 - {n_prefix}			number of lines before the cursor location to include
 						in the local prefix

@@ -6,7 +6,7 @@ highlight default llama_hl_fim_hint guifg=#ff772f ctermfg=202
 highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 
  " instruct colors for selected block
- highlight default llama_hl_inst_src guibg=#333333 ctermbg=236
+ highlight default llama_hl_inst_src guibg=#554433 ctermbg=236
 
  " virtual text colors for instructions
  highlight default llama_hl_inst_virt_proc  guifg=#77ff2f ctermfg=119
@@ -17,8 +17,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint_fim:     llama.cpp server endpoint for FIM completion
 "   endpoint_inst:    llama.cpp server endpoint for instruction completion
-"   model_fim:        model name in case when multiple models are loaded (optional)
-"   model_inst:       instruction model name (optional)
+"   model_fim:        model name in case when multiple models are loaded (optional, recommended: Qwen3 Coder 30B)
+"   model_inst:       instruction model name (optional, recommended: gpt-oss-120b)
 "   api_key:          llama.cpp server api key (optional)
 "   n_prefix:         number of lines before the cursor location to include in the local prefix
 "   n_suffix:         number of lines after  the cursor location to include in the local suffix
@@ -56,7 +56,11 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
 "   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
-"   keymap_inst_trigger:    keymap to trigger the instruction command, default: null
+"   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
+"   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
+"   keymap_inst_continue:   keymap to continue the instruction, default: <leader>llc
+"   keymap_inst_accept:     keymap to accept the instruction, default: <Tab>
+"   keymap_inst_cancel:     keymap to cancel the instruction, default: <Esc>
 "
 let s:default_config = {
     \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
@@ -78,14 +82,16 @@ let s:default_config = {
     \ 'ring_chunk_size':        64,
     \ 'ring_scope':             1024,
     \ 'ring_update_ms':         1000,
-    \ 'keymap_fim_trigger':     "<C-F>",
+    \ 'keymap_fim_trigger':     "<leader>llf",
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
-    \ 'keymap_fim_accept_word': "<C-B>",
-    \ 'keymap_inst_trigger':    "<C-I>",
+    \ 'keymap_fim_accept_word': "<leader>ll]",
+    \ 'keymap_inst_trigger':    "<leader>lli",
+    \ 'keymap_inst_rerun':      "<leader>llr",
+    \ 'keymap_inst_continue':   "<leader>llc",
     \ 'keymap_inst_accept':     "<Tab>",
     \ 'keymap_inst_cancel':     "<Esc>",
-    \ 'keymap_debug_toggle':    v:null,
+    \ 'keymap_debug_toggle':    "<leader>lld",
     \ 'enable_at_startup':      v:true,
     \ }
 
@@ -191,6 +197,8 @@ function! llama#disable()
 
     exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
     exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_rerun
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
     exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
     exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
 
@@ -255,8 +263,8 @@ function! llama#init()
 
     let s:current_job_fim  = v:null
 
-    let s:inst_requests = []
-    let s:inst_request_id = 0
+    let s:inst_reqs = {}
+    let s:inst_req_id = 0
 
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
     let s:ghost_text_vim = has('textprop')
@@ -317,9 +325,11 @@ function! llama#enable()
     exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
     exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
 
-    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger .. " :LlamaInstruct<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept  .. " :call llama#inst_accept()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel  .. " :call llama#inst_cancel()<CR>"
+    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger  .. " :LlamaInstruct<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_rerun    .. " :call llama#inst_rerun()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept   .. " :call llama#inst_accept()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel   .. " :call llama#inst_cancel()<CR>"
 
     call llama#setup_autocmds()
 
@@ -867,7 +877,7 @@ endfunction
 
 function! s:fim_on_exit(job_id, exit_code, event = v:null)
     if a:exit_code != 0
-        echom "Job failed with exit code: " . a:exit_code
+        echom "FIM job failed with exit code: " . a:exit_code
     endif
 
     let s:current_job_fim = v:null
@@ -1247,41 +1257,51 @@ endfunction
 " Instruct-based editing
 " =====================================
 
-function! llama#inst_build(lines, inst)
-    let l:system_message = {
-        \ 'role': 'system',
-        \ 'content': 'You are a code-editing assistant. Return ONLY the result after applying the instruction to the selection.'
-        \ }
+function! llama#inst_build(l0, l1, inst, inst_prev = [])
+    let l:prefix    = getline(max([1, a:l0 - g:llama_config.n_prefix]), a:l0 - 1)
+    let l:selection = getline(a:l0, a:l1)
+    let l:suffix    = getline(a:l1 + 1, min ([line('$'), a:l1 + g:llama_config.n_suffix]))
 
-    let l:extra = s:ring_get_extra()
+    if !empty(a:inst_prev)
+        let l:messages = copy(a:inst_prev)
+    else
+        let l:system_prompt  = ""
+        let l:system_prompt .= "You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators. Consider the local context before (PREFIX) and after (SUFFIX) the SELECTION.\n"
+
+        let l:extra = s:ring_get_extra()
+        let l:payload = {'CONTEXT': join(l:extra, "\n"), 'PREFIX': join(l:prefix, "\n"), 'SELECTION': join(l:selection, "\n"), 'SUFFIX': join(l:suffix, "\n")}
+
+        let l:system_prompt .= "\n" . json_encode(l:payload) . "\n"
+
+        let l:system_message = {
+            \ 'role': 'system',
+            \ 'content': l:system_prompt,
+            \ }
+
+        let l:messages = [l:system_message]
+    endif
 
     let l:user_content  = ""
-    let l:user_content .= "--- context ----------------------------------------------------\n"
-    let l:user_content .= join(l:extra, "\n") . "\n"
-    let l:user_content .= "--- selection --------------------------------------------------\n"
-    let l:user_content .= join(a:lines, "\n") . "\n"
-    let l:user_content .= "--- instruction ------------------------------------------------\n"
 
     if !empty(a:inst)
-        let l:user_content .= a:inst . "\n"
-        let l:user_content .= "--- result -----------------------------------------------------\n"
+        let l:user_content .= "INSTRUCTION: " . a:inst
     endif
 
     let l:user_message = {'role': 'user', 'content': l:user_content}
 
-    let l:messages = [l:system_message, l:user_message]
+    call add(l:messages, l:user_message)
 
     return l:messages
 endfunction
 
-function! llama#inst(start, end)
-    let l:lines = getline(a:start, a:end)
+function! llama#inst(l0, l1)
+    let l:l0 = a:l0
+    let l:l1 = a:l1
 
     " while the user is providing an instruction, send a warm-up request
-    let l:messages = llama#inst_build(l:lines, '')
+    let l:messages = llama#inst_build(l:l0, l:l1, '')
 
     let l:request = {
-        \ 'id_slot':      0,
         \ 'messages':     l:messages,
         \ 'samplers':     [],
         \ 'n_predict':    0,
@@ -1327,38 +1347,36 @@ function! llama#inst(start, end)
         return
     endif
 
-    call llama#inst_send(a:start, a:end, l:lines, l:inst, function('s:inst_callback', [a:start, a:end]))
-endfunction
+    call llama#debug_log('inst_send | ' . l:inst)
 
-function! llama#inst_send(start, end, lines, inst, callback)
     " Create request state
-    let l:request_id = s:inst_request_id
-    let s:inst_request_id += 1
-
-    let l:end = min([a:end, line('$')])
+    let l:req_id = s:inst_req_id
+    let s:inst_req_id += 1
 
     let l:bufnr = bufnr('%')
 
     let l:req = {
-        \ 'id': l:request_id,
+        \ 'id': l:req_id,
         \ 'bufnr': l:bufnr,
-        \ 'range': [a:start, l:end],
+        \ 'range': [l:l0, l:l1],
         \ 'status': 'proc',
         \ 'result': '',
-        \ 'inst': a:inst,
+        \ 'inst': l:inst,
+        \ 'inst_prev': [],
         \ 'job': v:null,
+        \ 'n_gen': 0,
         \ 'extmark': -1,
         \ 'extmark_virt': -1,
         \ }
 
-    call add(s:inst_requests, l:req)
+    let s:inst_reqs[l:req_id] = l:req
 
     " highlights the selected text
     if s:ghost_text_nvim
         let l:ns = nvim_create_namespace('vt_inst')
-        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, a:start - 1, 0, {
-            \ 'end_row': l:end - 1,
-            \ 'end_col': len(getline(l:end)),
+        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, l:l0 - 1, 0, {
+            \ 'end_row': l:l1 - 1,
+            \ 'end_col': len(getline(l:l1)),
             \ 'hl_group': 'llama_hl_inst_src'
             \ })
     elseif s:ghost_text_vim
@@ -1366,18 +1384,22 @@ function! llama#inst_send(start, end, lines, inst, callback)
     endif
 
     " Initialize virtual text with processing status
-    call s:inst_update(l:request_id, 'proc')
+    call s:inst_update(l:req_id, 'proc')
 
-    let l:messages = llama#inst_build(a:lines, a:inst)
+    let l:req.inst_prev = llama#inst_build(l:l0, l:l1, l:inst)
 
-    call llama#debug_log('inst_send | ' . a:inst, join(l:messages, "\n"))
+    call llama#inst_send(l:req_id, l:req.inst_prev)
+endfunction
+
+function! llama#inst_send(req_id, messages)
+    call llama#debug_log('inst_send', join(a:messages, "\n"))
 
     let l:request = {
-        \ 'id_slot':      0,
-        \ 'messages':     l:messages,
+        \ 'messages':     a:messages,
         \ 'min_p':        0.1,
-        \ 'samplers':     ["min_p"],
-        \ 'stream':       v:false,
+        \ 'temperature':  0.1,
+        \ 'samplers':     ["min_p", "temp"],
+        \ 'stream':       v:true,
         \ 'cache_prompt': v:true,
         \ }
 
@@ -1401,18 +1423,20 @@ function! llama#inst_send(start, end, lines, inst, callback)
 
     let l:request_json = json_encode(l:request)
 
+    let l:req = s:inst_reqs[a:req_id]
+
     if s:ghost_text_nvim
         let l:req.job = jobstart(l:curl_command, {
-            \ 'on_stdout': function('s:inst_on_response', [l:request_id, a:callback]),
-            \ 'on_exit':   function('s:inst_on_exit',     [l:request_id, a:callback]),
-            \ 'stdout_buffered': v:true
+            \ 'on_stdout': function('s:inst_on_response', [a:req_id]),
+            \ 'on_exit':   function('s:inst_on_exit',     [a:req_id]),
+            \ 'stdout_buffered': v:false
             \ })
         call chansend(l:req.job, l:request_json)
         call chanclose(l:req.job, 'stdin')
     elseif s:ghost_text_vim
         let l:req.job = job_start(l:curl_command, {
-            \ 'out_cb':  function('s:inst_on_response', [l:request_id, a:callback]),
-            \ 'exit_cb': function('s:inst_on_exit',     [l:request_id, a:callback])
+            \ 'out_cb':  function('s:inst_on_response', [a:req_id]),
+            \ 'exit_cb': function('s:inst_on_exit',     [a:req_id])
             \ })
 
         let channel = job_getchannel(l:req.job)
@@ -1423,130 +1447,191 @@ endfunction
 
 function! llama#inst_update_pos(req)
     let l:bufnr = a:req.bufnr
-    let l:ns    = nvim_create_namespace('vt_inst')
 
-    let l:extmark_pos = nvim_buf_get_extmark_by_id(l:bufnr, l:ns, a:req.extmark, {})
-    if empty(l:extmark_pos)
-        continue
+    if s:ghost_text_nvim
+        let l:ns = nvim_create_namespace('vt_inst')
+
+        let l:extmark_pos = nvim_buf_get_extmark_by_id(l:bufnr, l:ns, a:req.extmark, {})
+        if empty(l:extmark_pos)
+            continue
+        endif
+
+        let l:extmark_line = l:extmark_pos[0] + 1
+        let a:req.range[1] = l:extmark_line + a:req.range[1] - a:req.range[0]
+        let a:req.range[0] = l:extmark_line
+    else
+        " TODO: implement classic Vim support
     endif
-
-    let l:extmark_line = l:extmark_pos[0] + 1
-    let a:req.range[1] = l:extmark_line + a:req.range[1] - a:req.range[0]
-    let a:req.range[0] = l:extmark_line
 endfunction
 
 function! s:inst_update(id, status)
-    for l:req in s:inst_requests
-        if l:req.id == a:id
-            let l:req.status = a:status
-            call llama#inst_update_pos(l:req)
-
-            if s:ghost_text_nvim
-                let l:ns = nvim_create_namespace('vt_inst')
-
-                if l:req.extmark_virt != -1
-                    call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
-                    let l:req.extmark_virt = -1
-                endif
-
-                let l:inst_trunc = l:req.inst
-                if len(l:inst_trunc) > 64
-                    let l:inst_trunc = l:inst_trunc[:63] . '...'
-                endif
-
-                let l:virt_lines = []
-                let l:separator = '====================================='
-                if a:status == 'ready'
-                    let l:result_lines = split(l:req.result, "\n")
-                    let l:virt_lines = [[[l:separator, 'llama_hl_inst_virt_ready']]] + map(l:result_lines, {idx, val -> [[val, 'llama_hl_inst_virt_ready']]})
-                elseif a:status == 'proc'
-                    let l:virt_lines = [
-                        \ [[l:separator, 'llama_hl_inst_virt_proc']],
-                        \ [[printf('(%s) Processing ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_proc']],
-                        \ [['Instruction: ' . l:inst_trunc, 'llama_hl_inst_virt_proc']]
-                        \ ]
-                elseif a:status == 'gen'
-                    let l:virt_lines = [
-                        \ [[l:separator, 'llama_hl_inst_virt_gen']],
-                        \ [[printf('(%s) Generating ...', g:llama_config.endpoint_inst), 'llama_hl_inst_virt_gen']],
-                        \ [['Instruction: ' . l:inst_trunc, 'llama_hl_inst_virt_gen']]
-                        \ ]
-                endif
-
-                if !empty(l:virt_lines)
-                    let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
-                        \ 'virt_lines': l:virt_lines
-                        \ })
-                endif
-            elseif s:ghost_text_vim
-                " TODO: implement classic Vim support
-            endif
-            break
-        endif
-    endfor
-endfunction
-
-function! s:inst_on_response(id, callback, job_id, data, event = v:null)
-    call s:inst_update(a:id, 'gen')
-
-    if s:ghost_text_nvim
-        let l:raw = join(a:data, "\n")
-    elseif s:ghost_text_vim
-        let l:raw = a:data
+    if !has_key(s:inst_reqs, a:id)
+        return
     endif
 
-    if len(l:raw) == 0
+    let l:req = s:inst_reqs[a:id]
+
+    let l:req.status = a:status
+    call llama#inst_update_pos(l:req)
+
+    if s:ghost_text_nvim
+        let l:ns = nvim_create_namespace('vt_inst')
+
+        if l:req.extmark_virt != -1
+            call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
+            let l:req.extmark_virt = -1
+        endif
+
+        let l:inst_trunc = l:req.inst
+        if len(l:inst_trunc) > 128
+            let l:inst_trunc = l:inst_trunc[:127] . '...'
+        endif
+
+        let l:hl = ''
+        let l:sep = '====================================='
+
+        let l:virt_lines = []
+        if a:status == 'ready'
+            let l:result_lines = split(l:req.result, "\n")
+
+            let l:hl = 'llama_hl_inst_virt_ready'
+            let l:virt_lines = [[[l:sep, l:hl]]] + map(l:result_lines, {idx, val -> [[val, l:hl]]})
+        elseif a:status == 'proc'
+            let l:hl = 'llama_hl_inst_virt_proc'
+            let l:virt_lines = [
+                \ [[l:sep, l:hl]],
+                \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst), l:hl]],
+                \ [[printf('Model:       %s', g:llama_config.model_inst),    l:hl]],
+                \ [[printf('Instruction: %s', l:inst_trunc),                 l:hl]],
+                \ [[printf('Processing ...'),                                l:hl]]
+                \ ]
+        elseif a:status == 'gen'
+            let l:preview = substitute(l:req.result, '.*\n\s*', '', '')
+            if len(l:req.result) == 0
+                let l:preview = '[thinking]'
+            endif
+
+            let l:hl = 'llama_hl_inst_virt_gen'
+            let l:virt_lines = [
+                \ [[l:sep, l:hl]],
+                \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst),        l:hl]],
+                \ [[printf('Model:       %s', g:llama_config.model_inst),           l:hl]],
+                \ [[printf('Instruction: %s', l:inst_trunc),                        l:hl]],
+                \ [[printf('Generating:  %4d tokens | %s', l:req.n_gen, l:preview), l:hl]],
+                \ ]
+        endif
+
+        if !empty(l:virt_lines)
+            let l:virt_lines = l:virt_lines + [[[l:sep, l:hl]]]
+            let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
+                \ 'virt_lines': l:virt_lines
+                \ })
+        endif
+    elseif s:ghost_text_vim
+        " TODO: implement classic Vim support
+    endif
+endfunction
+
+function! s:inst_on_response(id, job_id, data, event = v:null)
+    if has('nvim')
+        let l:lines = a:data
+    else
+        let l:lines = [a:data]
+    endif
+
+    if len(l:lines) == 0
         return
     endif
 
     let l:content = ''
-    try
-        let l:response = json_decode(l:raw)
-        let l:content = get(l:response, 'choices', [{}])[0].message.content
-    catch
-        " Assume plain text response
-        let l:content = l:raw
-    endtry
-
-    " Store result
-    for l:req in s:inst_requests
-        if l:req.id == a:id
-            let l:req.result = l:content
-            break
+    for l:line in l:lines
+        if len(l:line) > 5 && l:line[:5] ==# 'data: '
+            let l:line = l:line[6:]
         endif
+
+        if empty(l:line) || l:line =~# '^\s*$'
+            continue
+        endif
+
+        try
+            let l:response = json_decode(l:line)
+            let l:choices = get(l:response, 'choices', [{}])
+
+            if has_key(l:choices[0], 'delta')
+                " stream = true
+                let l:delta = l:choices[0].delta
+                if has_key(l:delta, 'content')
+                    let l:delta = l:delta.content
+                    if type(l:delta) == v:t_string
+                        let l:content .= l:delta
+                    endif
+                endif
+            elseif has_key(l:choices[0], 'message')
+                " stream = false
+                let l:delta = l:choices[0].message.content
+                if type(l:delta) == v:t_string
+                    let l:content .= l:delta
+                endif
+            endif
+        catch
+            " non-json
+            call llama#debug_log('inst_on_response parse error', l:line)
+        endtry
     endfor
+
+    if !has_key(s:inst_reqs, a:id)
+        return
+    endif
+
+    call s:inst_update(a:id, 'gen')
+
+    let l:req = s:inst_reqs[a:id]
+
+    if !empty(l:content)
+        let l:req.result .= l:content
+    endif
+
+    let l:req.n_gen = l:req.n_gen + 1
 endfunction
 
-function! s:inst_on_exit(id, callback, job_id, exit_code, event = v:null)
+function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
     if a:exit_code != 0
-        echohl ErrorMsg
-        echo "Instruct job failed with exit code: " . a:exit_code
-        echohl None
+        echom "Instruct job failed with exit code: " . a:exit_code
         call s:inst_remove(a:id)
         return
     endif
 
+    if !has_key(s:inst_reqs, a:id)
+        return
+    endif
+
     call s:inst_update(a:id, 'ready')
+
+    " add assistant response to messages for continuation
+    let l:req = s:inst_reqs[a:id]
+    call add(l:req.inst_prev, {'role': 'assistant', 'content': l:req.result})
 endfunction
 
 function! s:inst_remove(id)
-    for i in range(len(s:inst_requests))
-        let l:req = s:inst_requests[i]
-        if l:req.id == a:id
-            if s:ghost_text_nvim
-                let l:ns = nvim_create_namespace('vt_inst')
-                call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark)
-                if l:req.extmark_virt != -1
-                    call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
-                endif
+    if has_key(s:inst_reqs, a:id)
+        let l:req = s:inst_reqs[a:id]
+        if s:ghost_text_nvim
+            let l:ns = nvim_create_namespace('vt_inst')
+            call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark)
+            if l:req.extmark_virt != -1
+                call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
             endif
-            call remove(s:inst_requests, i)
-            break
+            call jobstop(l:req.job)
+        elseif s:ghost_text_vim
+            " TODO: implement classic Vim support
+            call job_stop(l:req.job)
         endif
-    endfor
+
+        call remove(s:inst_reqs, a:id)
+    endif
 endfunction
 
-function! s:inst_callback(bufnr, start, end, result)
+function! s:inst_callback(bufnr, l0, l1, result)
     let l:result_lines = split(a:result, "\n", 1)
 
     " Remove trailing empty lines
@@ -1555,19 +1640,19 @@ function! s:inst_callback(bufnr, start, end, result)
     endwhile
 
     let l:num_result = len(l:result_lines)
-    let l:num_original = a:end - a:start + 1
+    let l:num_original = a:l1 - a:l0 + 1
 
     " Delete the original range
-    call deletebufline(a:bufnr, a:start, a:end)
+    call deletebufline(a:bufnr, a:l0, a:l1)
 
     " Insert the new lines
-    call append(a:start - 1, l:result_lines)
+    call append(a:l0 - 1, l:result_lines)
 endfunction
 
 function! llama#inst_accept()
     let l:line = line('.')
 
-    for l:req in s:inst_requests
+    for l:req in values(s:inst_reqs)
         if l:req.status ==# 'ready'
             call llama#inst_update_pos(l:req)
 
@@ -1584,15 +1669,64 @@ endfunction
 
 function! llama#inst_cancel()
     let l:line = line('.')
-    for l:req in s:inst_requests
-        call llama#inst_update_pos(l:req)
-
+    for l:req in values(s:inst_reqs)
         if l:line >= l:req.range[0] && l:line <= l:req.range[1]
             call s:inst_remove(l:req.id)
             return
         endif
     endfor
     " If not in range, do normal Esc (nothing)
+endfunction
+
+function! llama#inst_rerun()
+    let l:lnum = line('.')
+    for l:req in values(s:inst_reqs)
+        call llama#inst_update_pos(l:req)
+
+        if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
+            call llama#debug_log('inst_rerun')
+
+            let l:req.result = ''
+            let l:req.status = 'proc'
+            let l:req.n_gen = 0
+
+            call remove(l:req.inst_prev, -1)
+
+            call s:inst_update(l:req.id, 'proc')
+
+            call llama#inst_send(l:req.id, l:req.inst_prev)
+            return
+        endif
+    endfor
+endfunction
+
+function! llama#inst_continue()
+    let l:lnum = line('.')
+    for l:req in values(s:inst_reqs)
+        call llama#inst_update_pos(l:req)
+
+        if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
+            let l:inst = input('Next instruction: ')
+            if empty(l:inst)
+                return
+            endif
+
+            call llama#debug_log('inst_continue | ' . l:inst)
+
+            let l:req.result = ''
+            let l:req.status = 'proc'
+            let l:req.inst = l:inst
+            let l:req.n_gen = 0
+
+            call s:inst_update(l:req.id, 'proc')
+
+            let l:req.inst_prev = llama#inst_build(l:req.range[0], l:req.range[1], l:inst, l:req.inst_prev)
+
+            call llama#inst_send(l:req.id, l:req.inst_prev)
+            return
+        endif
+    endfor
+    " If not in active edit, do nothing
 endfunction
 
 " =====================================
