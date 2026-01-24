@@ -1266,14 +1266,8 @@ function! llama#inst_build(lines, inst, inst_prev = [])
 
         let l:extra = s:ring_get_extra()
 
-        let l:system_prompt .= "\n"
-        let l:system_prompt .= "--- CONTEXT   --------------------------------------------------\n"
-        let l:system_prompt .= join(l:extra, "\n") . "\n"
-        let l:system_prompt .= "--- END       --------------------------------------------------\n"
-        let l:system_prompt .= "\n"
-        let l:system_prompt .= "--- SELECTION --------------------------------------------------\n"
-        let l:system_prompt .= join(a:lines, "\n") . "\n"
-        let l:system_prompt .= "--- END       --------------------------------------------------\n"
+        let l:payload = {'CONTENT': join(l:extra, "\n"), 'SELECTION': join(a:lines, "\n")}
+        let l:system_prompt .= "\n" . json_encode(l:payload) . "\n"
 
         let l:system_message = {
             \ 'role': 'system',
