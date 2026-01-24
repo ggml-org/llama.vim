@@ -17,10 +17,9 @@ https://github.com/user-attachments/assets/641a6e72-f1a2-4fe5-b0fd-c2597c6f4cdc
 ## Features
 
 - Auto-suggest on cursor movement in `Insert` mode
-- Toggle the suggestion manually by pressing `Ctrl+F`
 - Accept a suggestion with `Tab`
 - Accept the first line of a suggestion with `Shift+Tab`
-- Instruction-based editing (instruct mode) with `Ctrl+I`
+- Instruction-based editing (instruct mode) with `<leader>lli`
 - Control max text generation time
 - Configure scope of context around the cursor
 - Ring context with chunks from open and edited files and yanked text
@@ -88,15 +87,24 @@ Examples:
     }
     ```
 
-4. Changing accept line keymap
-
-5. Configure instruction-based editing trigger keymap
+4. Configure FIM keymaps:
 
     ```vim
-    let g:llama_config.keymap_inst_trigger = "<C-I>"
+    let g:llama_config.keymap_fim_trigger     = "<leader>llf"
+    let g:llama_config.keymap_fim_accept_full = "<Tab>"
+    let g:llama_config.keymap_fim_accept_line = "<S-Tab>"
+    let g:llama_config.keymap_fim_accept_word = "<leader>ll]"
     ```
 
-5. Configure instruction-based editing trigger keymap
+5. Configure instruction-based editing keymaps
+
+    ```vim
+    let g:llama_config.keymap_inst_trigger  = "<leader>lli"
+    let g:llama_config.keymap_inst_retry    = "<leader>llr"
+    let g:llama_config.keymap_inst_continue = "<leader>llc"
+    let g:llama_config.keymap_inst_accept   = "<Tab>"
+    let g:llama_config.keymap_inst_cancel   = "<Esc>"
+    ```
 
 Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
 for the full list of options.
