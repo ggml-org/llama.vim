@@ -6,7 +6,7 @@ highlight default llama_hl_fim_hint guifg=#ff772f ctermfg=202
 highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 
  " instruct colors for selected block
- highlight default llama_hl_inst_src guibg=#333333 ctermbg=236
+ highlight default llama_hl_inst_src guibg=#554433 ctermbg=236
 
  " virtual text colors for instructions
  highlight default llama_hl_inst_virt_proc  guifg=#77ff2f ctermfg=119
@@ -1302,7 +1302,6 @@ function! llama#inst(l0, l1)
     let l:messages = llama#inst_build(l:l0, l:l1, '')
 
     let l:request = {
-        \ 'id_slot':      0,
         \ 'messages':     l:messages,
         \ 'samplers':     [],
         \ 'n_predict':    0,
@@ -1396,7 +1395,6 @@ function! llama#inst_send(req_id, messages)
     call llama#debug_log('inst_send', join(a:messages, "\n"))
 
     let l:request = {
-        \ 'id_slot':      0,
         \ 'messages':     a:messages,
         \ 'min_p':        0.1,
         \ 'temperature':  0.1,
