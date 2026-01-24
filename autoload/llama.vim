@@ -1454,16 +1454,21 @@ endfunction
 
 function! llama#inst_update_pos(req)
     let l:bufnr = a:req.bufnr
-    let l:ns    = nvim_create_namespace('vt_inst')
 
-    let l:extmark_pos = nvim_buf_get_extmark_by_id(l:bufnr, l:ns, a:req.extmark, {})
-    if empty(l:extmark_pos)
-        continue
+    if s:ghost_text_nvim
+        let l:ns = nvim_create_namespace('vt_inst')
+
+        let l:extmark_pos = nvim_buf_get_extmark_by_id(l:bufnr, l:ns, a:req.extmark, {})
+        if empty(l:extmark_pos)
+            continue
+        endif
+
+        let l:extmark_line = l:extmark_pos[0] + 1
+        let a:req.range[1] = l:extmark_line + a:req.range[1] - a:req.range[0]
+        let a:req.range[0] = l:extmark_line
+    else
+        " TODO: implement classic Vim support
     endif
-
-    let l:extmark_line = l:extmark_pos[0] + 1
-    let a:req.range[1] = l:extmark_line + a:req.range[1] - a:req.range[0]
-    let a:req.range[0] = l:extmark_line
 endfunction
 
 function! s:inst_update(id, status)
@@ -1534,29 +1539,52 @@ endfunction
 function! s:inst_on_response(id, callback, job_id, data, event = v:null)
     call s:inst_update(a:id, 'gen')
 
-    if s:ghost_text_nvim
-        let l:raw = join(a:data, "\n")
-    elseif s:ghost_text_vim
-        let l:raw = a:data
+    if has('nvim')
+        let l:lines = a:data
+    else
+        let l:lines = [a:data]
     endif
 
-    if len(l:raw) == 0
+    if len(l:lines) == 0
         return
     endif
 
     let l:content = ''
-    try
-        if len(l:raw) > 5 && l:raw[:5] ==# 'data: '
-            let l:raw = l:raw[6:]
+    for l:line in l:lines
+        if len(l:line) > 5 && l:line[:5] ==# 'data: '
+            let l:line = l:line[6:]
         endif
 
-        let l:response = json_decode(l:raw)
-        let l:content = get(l:response, 'choices', [{}])[0].delta.content
-    catch
-        let l:content = v:null
-    endtry
+        if empty(l:line) || l:line =~# '^\s*$'
+            continue
+        endif
 
-    " Store result
+        try
+            let l:response = json_decode(l:line)
+            let l:choices = get(l:response, 'choices', [{}])
+
+            if has_key(l:choices[0], 'delta')
+                " stream = true
+                let l:delta = l:choices[0].delta
+                if has_key(l:delta, 'content')
+                    let l:delta = l:delta.content
+                    if type(l:delta) == v:t_string
+                        let l:content .= l:delta
+                    endif
+                endif
+            elseif has_key(l:choices[0], 'message')
+                " stream = false
+                let l:delta = l:choices[0].message.content
+                if type(l:delta) == v:t_string
+                    let l:content .= l:delta
+                endif
+            endif
+        catch
+            " non-json
+            call llama#debug_log('inst_on_response parse error', l:line)
+        endtry
+    endfor
+
     for l:req in s:inst_requests
         if l:req.id == a:id
             if !empty(l:content)
