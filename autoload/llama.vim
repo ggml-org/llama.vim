@@ -1499,6 +1499,7 @@ function! s:inst_update(id, status)
             let l:virt_lines = [
                 \ [[l:sep, l:hl]],
                 \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst), l:hl]],
+                \ [[printf('Model:       %s', g:llama_config.model_inst),    l:hl]],
                 \ [[printf('Instruction: %s', l:inst_trunc),                 l:hl]],
                 \ [[printf('Processing ...'),                                l:hl]]
                 \ ]
@@ -1512,6 +1513,7 @@ function! s:inst_update(id, status)
             let l:virt_lines = [
                 \ [[l:sep, l:hl]],
                 \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst),        l:hl]],
+                \ [[printf('Model:       %s', g:llama_config.model_inst),           l:hl]],
                 \ [[printf('Instruction: %s', l:inst_trunc),                        l:hl]],
                 \ [[printf('Generating:  %4d tokens | %s', l:req.n_gen, l:preview), l:hl]],
                 \ ]
