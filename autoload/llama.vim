@@ -263,7 +263,7 @@ function! llama#init()
 
     let s:current_job_fim  = v:null
 
-    let s:inst_requests = []
+    let s:inst_reqs = {}
     let s:inst_req_id = 0
 
     let s:ghost_text_nvim = exists('*nvim_buf_get_mark')
@@ -1368,7 +1368,7 @@ function! llama#inst(start, end)
         \ 'extmark_virt': -1,
         \ }
 
-    call add(s:inst_requests, l:req)
+    let s:inst_reqs[l:req_id] = l:req
 
     " highlights the selected text
     if s:ghost_text_nvim
@@ -1425,13 +1425,7 @@ function! llama#inst_send(req_id, messages)
 
     let l:request_json = json_encode(l:request)
 
-    let l:req = v:null
-    for l:r in s:inst_requests
-        if l:r.id == a:req_id
-            let l:req = l:r
-            break
-        endif
-    endfor
+    let l:req = s:inst_reqs[a:req_id]
 
     if s:ghost_text_nvim
         let l:req.job = jobstart(l:curl_command, {
@@ -1473,68 +1467,65 @@ function! llama#inst_update_pos(req)
 endfunction
 
 function! s:inst_update(id, status)
-    for l:req in s:inst_requests
-        if l:req.id == a:id
-            let l:req.status = a:status
-            call llama#inst_update_pos(l:req)
+    let l:req = s:inst_reqs[a:id]
 
-            if s:ghost_text_nvim
-                let l:ns = nvim_create_namespace('vt_inst')
+    let l:req.status = a:status
+    call llama#inst_update_pos(l:req)
 
-                if l:req.extmark_virt != -1
-                    call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
-                    let l:req.extmark_virt = -1
-                endif
+    if s:ghost_text_nvim
+        let l:ns = nvim_create_namespace('vt_inst')
 
-                let l:inst_trunc = l:req.inst
-                if len(l:inst_trunc) > 128
-                    let l:inst_trunc = l:inst_trunc[:127] . '...'
-                endif
-
-                let l:hl = ''
-                let l:sep = '====================================='
-
-                let l:virt_lines = []
-                if a:status == 'ready'
-                    let l:result_lines = split(l:req.result, "\n")
-
-                    let l:hl = 'llama_hl_inst_virt_ready'
-                    let l:virt_lines = [[[l:sep, l:hl]]] + map(l:result_lines, {idx, val -> [[val, l:hl]]})
-                elseif a:status == 'proc'
-                    let l:hl = 'llama_hl_inst_virt_proc'
-                    let l:virt_lines = [
-                        \ [[l:sep, l:hl]],
-                        \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst), l:hl]],
-                        \ [[printf('Instruction: %s', l:inst_trunc),                 l:hl]],
-                        \ [[printf('Processing ...'),                                l:hl]]
-                        \ ]
-                elseif a:status == 'gen'
-                    let l:preview = substitute(l:req.result, '.*\n\s*', '', '')
-                    if len(l:req.result) == 0
-                        let l:preview = '[thinking]'
-                    endif
-
-                    let l:hl = 'llama_hl_inst_virt_gen'
-                    let l:virt_lines = [
-                        \ [[l:sep, l:hl]],
-                        \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst),        l:hl]],
-                        \ [[printf('Instruction: %s', l:inst_trunc),                        l:hl]],
-                        \ [[printf('Generating:  %4d tokens | %s', l:req.n_gen, l:preview), l:hl]],
-                        \ ]
-                endif
-
-                if !empty(l:virt_lines)
-                    let l:virt_lines = l:virt_lines + [[[l:sep, l:hl]]]
-                    let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
-                        \ 'virt_lines': l:virt_lines
-                        \ })
-                endif
-            elseif s:ghost_text_vim
-                " TODO: implement classic Vim support
-            endif
-            break
+        if l:req.extmark_virt != -1
+            call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
+            let l:req.extmark_virt = -1
         endif
-    endfor
+
+        let l:inst_trunc = l:req.inst
+        if len(l:inst_trunc) > 128
+            let l:inst_trunc = l:inst_trunc[:127] . '...'
+        endif
+
+        let l:hl = ''
+        let l:sep = '====================================='
+
+        let l:virt_lines = []
+        if a:status == 'ready'
+            let l:result_lines = split(l:req.result, "\n")
+
+            let l:hl = 'llama_hl_inst_virt_ready'
+            let l:virt_lines = [[[l:sep, l:hl]]] + map(l:result_lines, {idx, val -> [[val, l:hl]]})
+        elseif a:status == 'proc'
+            let l:hl = 'llama_hl_inst_virt_proc'
+            let l:virt_lines = [
+                \ [[l:sep, l:hl]],
+                \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst), l:hl]],
+                \ [[printf('Instruction: %s', l:inst_trunc),                 l:hl]],
+                \ [[printf('Processing ...'),                                l:hl]]
+                \ ]
+        elseif a:status == 'gen'
+            let l:preview = substitute(l:req.result, '.*\n\s*', '', '')
+            if len(l:req.result) == 0
+                let l:preview = '[thinking]'
+            endif
+
+            let l:hl = 'llama_hl_inst_virt_gen'
+            let l:virt_lines = [
+                \ [[l:sep, l:hl]],
+                \ [[printf('Endpoint:    %s', g:llama_config.endpoint_inst),        l:hl]],
+                \ [[printf('Instruction: %s', l:inst_trunc),                        l:hl]],
+                \ [[printf('Generating:  %4d tokens | %s', l:req.n_gen, l:preview), l:hl]],
+                \ ]
+        endif
+
+        if !empty(l:virt_lines)
+            let l:virt_lines = l:virt_lines + [[[l:sep, l:hl]]]
+            let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
+                \ 'virt_lines': l:virt_lines
+                \ })
+        endif
+    elseif s:ghost_text_vim
+        " TODO: implement classic Vim support
+    endif
 endfunction
 
 function! s:inst_on_response(id, job_id, data, event = v:null)
@@ -1586,15 +1577,11 @@ function! s:inst_on_response(id, job_id, data, event = v:null)
         endtry
     endfor
 
-    for l:req in s:inst_requests
-        if l:req.id == a:id
-            if !empty(l:content)
-                let l:req.result .= l:content
-            endif
-            let l:req.n_gen = l:req.n_gen + 1
-            break
-        endif
-    endfor
+    let l:req = s:inst_reqs[a:id]
+    if !empty(l:content)
+        let l:req.result .= l:content
+    endif
+    let l:req.n_gen = l:req.n_gen + 1
 endfunction
 
 function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
@@ -1608,30 +1595,23 @@ function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
 
     call s:inst_update(a:id, 'ready')
 
-    " Add assistant response to messages for continuation
-    for l:req in s:inst_requests
-        if l:req.id == a:id
-            call add(l:req.inst_prev, {'role': 'assistant', 'content': l:req.result})
-            break
-        endif
-    endfor
+    " add assistant response to messages for continuation
+    let l:req = s:inst_reqs[a:id]
+    call add(l:req.inst_prev, {'role': 'assistant', 'content': l:req.result})
 endfunction
 
 function! s:inst_remove(id)
-    for i in range(len(s:inst_requests))
-        let l:req = s:inst_requests[i]
-        if l:req.id == a:id
-            if s:ghost_text_nvim
-                let l:ns = nvim_create_namespace('vt_inst')
-                call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark)
-                if l:req.extmark_virt != -1
-                    call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
-                endif
+    if has_key(s:inst_reqs, a:id)
+        let l:req = s:inst_reqs[a:id]
+        if s:ghost_text_nvim
+            let l:ns = nvim_create_namespace('vt_inst')
+            call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark)
+            if l:req.extmark_virt != -1
+                call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
             endif
-            call remove(s:inst_requests, i)
-            break
         endif
-    endfor
+        call remove(s:inst_reqs, a:id)
+    endif
 endfunction
 
 function! s:inst_callback(bufnr, start, end, result)
@@ -1655,7 +1635,7 @@ endfunction
 function! llama#inst_accept()
     let l:line = line('.')
 
-    for l:req in s:inst_requests
+    for l:req in values(s:inst_reqs)
         if l:req.status ==# 'ready'
             call llama#inst_update_pos(l:req)
 
@@ -1672,9 +1652,7 @@ endfunction
 
 function! llama#inst_cancel()
     let l:line = line('.')
-    for l:req in s:inst_requests
-        call llama#inst_update_pos(l:req)
-
+    for l:req in values(s:inst_reqs)
         if l:line >= l:req.range[0] && l:line <= l:req.range[1]
             call s:inst_remove(l:req.id)
             return
@@ -1685,7 +1663,7 @@ endfunction
 
 function! llama#inst_rerun()
     let l:lnum = line('.')
-    for l:req in s:inst_requests
+    for l:req in values(s:inst_reqs)
         call llama#inst_update_pos(l:req)
 
         if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
@@ -1707,7 +1685,7 @@ endfunction
 
 function! llama#inst_continue()
     let l:lnum = line('.')
-    for l:req in s:inst_requests
+    for l:req in values(s:inst_reqs)
         call llama#inst_update_pos(l:req)
 
         if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
