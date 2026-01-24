@@ -11,7 +11,7 @@ Requires:
 - curl
 - llama.cpp server instance
 - FIM-compatible model
-
+- Instruct-compatible model
 
 ================================================================================
 Default Shortcut
@@ -145,8 +145,10 @@ Currently the default config is:
 - {api_key}				llama.cpp server api key (optional)
 
 - {model_fim}			model name for FIM completion (optional)
+						recommended: Qwen3 Coder 30B
 
 - {model_inst}			model name for instruction completion (optional)
+						recommended: gpt-oss-120b
 
 - {n_prefix}			number of lines before the cursor location to include
 						in the local prefix

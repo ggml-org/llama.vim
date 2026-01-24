@@ -17,8 +17,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint_fim:     llama.cpp server endpoint for FIM completion
 "   endpoint_inst:    llama.cpp server endpoint for instruction completion
-"   model_fim:        model name in case when multiple models are loaded (optional)
-"   model_inst:       instruction model name (optional)
+"   model_fim:        model name in case when multiple models are loaded (optional, recommended: Qwen3 Coder 30B)
+"   model_inst:       instruction model name (optional, recommended: gpt-oss-120b)
 "   api_key:          llama.cpp server api key (optional)
 "   n_prefix:         number of lines before the cursor location to include in the local prefix
 "   n_suffix:         number of lines after  the cursor location to include in the local suffix
