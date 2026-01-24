@@ -1258,9 +1258,9 @@ endfunction
 " =====================================
 
 function! llama#inst_build(l0, l1, inst, inst_prev = [])
-    let l:prefix    = getline(max([1, a:l0 - 8]), a:l0 - 1)
+    let l:prefix    = getline(max([1, a:l0 - g:llama_config.n_prefix]), a:l0 - 1)
     let l:selection = getline(a:l0, a:l1)
-    let l:suffix    = getline(a:l1 + 1, min ([line('$'), a:l1 + 8]))
+    let l:suffix    = getline(a:l1 + 1, min ([line('$'), a:l1 + g:llama_config.n_suffix]))
 
     if !empty(a:inst_prev)
         let l:messages = copy(a:inst_prev)
