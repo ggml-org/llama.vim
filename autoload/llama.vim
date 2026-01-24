@@ -56,7 +56,11 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
 "   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
-"   keymap_inst_trigger:    keymap to trigger the instruction command, default: null
+"   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
+"   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
+"   keymap_inst_continue:   keymap to continue the instruction, default: <leader>llc
+"   keymap_inst_accept:     keymap to accept the instruction, default: <Tab>
+"   keymap_inst_cancel:     keymap to cancel the instruction, default: <Esc>
 "
 let s:default_config = {
     \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
@@ -78,15 +82,16 @@ let s:default_config = {
     \ 'ring_chunk_size':        64,
     \ 'ring_scope':             1024,
     \ 'ring_update_ms':         1000,
-    \ 'keymap_fim_trigger':     "<C-F>",
+    \ 'keymap_fim_trigger':     "<leader>llf",
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
-    \ 'keymap_fim_accept_word': "<C-B>",
-    \ 'keymap_inst_trigger':    "<C-I>",
+    \ 'keymap_fim_accept_word': "<leader>ll]",
+    \ 'keymap_inst_trigger':    "<leader>lli",
+    \ 'keymap_inst_rerun':      "<leader>llr",
+    \ 'keymap_inst_continue':   "<leader>llc",
     \ 'keymap_inst_accept':     "<Tab>",
     \ 'keymap_inst_cancel':     "<Esc>",
-    \ 'keymap_inst_continue':   "<C-Tab>",
-    \ 'keymap_debug_toggle':    v:null,
+    \ 'keymap_debug_toggle':    "<leader>lld",
     \ 'enable_at_startup':      v:true,
     \ }
 
@@ -192,9 +197,10 @@ function! llama#disable()
 
     exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
     exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_rerun
+    exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
     exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
     exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
 
     let s:llama_enabled = v:false
 
@@ -319,10 +325,11 @@ function! llama#enable()
     exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
     exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
 
-    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger .. " :LlamaInstruct<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept  .. " :call llama#inst_accept()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel  .. " :call llama#inst_cancel()<CR>"
+    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger  .. " :LlamaInstruct<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_rerun    .. " :call llama#inst_rerun()<CR>"
     exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept   .. " :call llama#inst_accept()<CR>"
+    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel   .. " :call llama#inst_cancel()<CR>"
 
     call llama#setup_autocmds()
 
@@ -1388,10 +1395,10 @@ function! llama#inst(start, end)
 
     let l:req.inst_prev = l:messages
 
-    call llama#inst_send(l:req_id, l:messages, function('s:inst_callback', [l:start, l:end]))
+    call llama#inst_send(l:req_id, l:messages)
 endfunction
 
-function! llama#inst_send(req_id, messages, callback)
+function! llama#inst_send(req_id, messages)
     call llama#debug_log('inst_send', join(a:messages, "\n"))
 
     let l:request = {
@@ -1434,16 +1441,16 @@ function! llama#inst_send(req_id, messages, callback)
 
     if s:ghost_text_nvim
         let l:req.job = jobstart(l:curl_command, {
-            \ 'on_stdout': function('s:inst_on_response', [a:req_id, a:callback]),
-            \ 'on_exit':   function('s:inst_on_exit',     [a:req_id, a:callback]),
+            \ 'on_stdout': function('s:inst_on_response', [a:req_id]),
+            \ 'on_exit':   function('s:inst_on_exit',     [a:req_id]),
             \ 'stdout_buffered': v:false
             \ })
         call chansend(l:req.job, l:request_json)
         call chanclose(l:req.job, 'stdin')
     elseif s:ghost_text_vim
         let l:req.job = job_start(l:curl_command, {
-            \ 'out_cb':  function('s:inst_on_response', [a:req_id, a:callback]),
-            \ 'exit_cb': function('s:inst_on_exit',     [a:req_id, a:callback])
+            \ 'out_cb':  function('s:inst_on_response', [a:req_id]),
+            \ 'exit_cb': function('s:inst_on_exit',     [a:req_id])
             \ })
 
         let channel = job_getchannel(l:req.job)
@@ -1536,7 +1543,7 @@ function! s:inst_update(id, status)
     endfor
 endfunction
 
-function! s:inst_on_response(id, callback, job_id, data, event = v:null)
+function! s:inst_on_response(id, job_id, data, event = v:null)
     call s:inst_update(a:id, 'gen')
 
     if has('nvim')
@@ -1596,7 +1603,7 @@ function! s:inst_on_response(id, callback, job_id, data, event = v:null)
     endfor
 endfunction
 
-function! s:inst_on_exit(id, callback, job_id, exit_code, event = v:null)
+function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
     if a:exit_code != 0
         echohl ErrorMsg
         echo "Instruct job failed with exit code: " . a:exit_code
@@ -1682,6 +1689,28 @@ function! llama#inst_cancel()
     " If not in range, do normal Esc (nothing)
 endfunction
 
+function! llama#inst_rerun()
+    let l:lnum = line('.')
+    for l:req in s:inst_requests
+        call llama#inst_update_pos(l:req)
+
+        if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
+            call llama#debug_log('inst_rerun')
+
+            let l:req.result = ''
+            let l:req.status = 'proc'
+            let l:req.n_gen = 0
+
+            call remove(l:req.inst_prev, -1)
+
+            call s:inst_update(l:req.id, 'proc')
+
+            call llama#inst_send(l:req.id, l:req.inst_prev)
+            return
+        endif
+    endfor
+endfunction
+
 function! llama#inst_continue()
     let l:lnum = line('.')
     for l:req in s:inst_requests
@@ -1705,7 +1734,7 @@ function! llama#inst_continue()
 
             let l:messages = llama#inst_build(l:lines, l:inst, l:req.inst_prev)
 
-            call llama#inst_send(l:req.id, l:messages, function('s:inst_callback', [l:req.range[0], l:req.range[1]]))
+            call llama#inst_send(l:req.id, l:messages)
             return
         endif
     endfor

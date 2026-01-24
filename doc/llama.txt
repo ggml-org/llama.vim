@@ -16,11 +16,16 @@ Requires:
 ================================================================================
 Default Shortcut
 
-- Tab       - accept the current suggestion
-- Shift+Tab - accept just the first line of the suggestion
-- Ctrl+B    - accept just the first word of the suggestion
-- Ctrl+F    - trigger FIM completion manually
-- Ctrl+I    - trigger instruction-based editing (instruct mode)
+- Tab         - accept the current suggestion
+- Shift+Tab   - accept just the first line of the suggestion
+- <leader>ll] - accept just the first word of the suggestion
+- <leader>llf - trigger FIM completion manually
+- <leader>lli - trigger instruction-based editing (instruct mode)
+- <leader>llr - rerun the instruction
+- <leader>llc - continue the instruction
+- <leader>llr - accept the instruction (accept the instruction)
+- <leader>llq - cancel the instruction (cancel the instruction)
+- <leader>lld - toggle the debug pane
 
 ================================================================================
 Commands
