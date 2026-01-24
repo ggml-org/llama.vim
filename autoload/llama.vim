@@ -877,7 +877,7 @@ endfunction
 
 function! s:fim_on_exit(job_id, exit_code, event = v:null)
     if a:exit_code != 0
-        echom "Job failed with exit code: " . a:exit_code
+        echom "FIM job failed with exit code: " . a:exit_code
     endif
 
     let s:current_job_fim = v:null
@@ -1257,16 +1257,20 @@ endfunction
 " Instruct-based editing
 " =====================================
 
-function! llama#inst_build(lines, inst, inst_prev = [])
+function! llama#inst_build(l0, l1, inst, inst_prev = [])
+    let l:prefix    = getline(max([1, a:l0 - 8]), a:l0 - 1)
+    let l:selection = getline(a:l0, a:l1)
+    let l:suffix    = getline(a:l1 + 1, min ([line('$'), a:l1 + 8]))
+
     if !empty(a:inst_prev)
         let l:messages = copy(a:inst_prev)
     else
         let l:system_prompt  = ""
-        let l:system_prompt .= "You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators.\n"
+        let l:system_prompt .= "You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators. Consider the local context before (PREFIX) and after (SUFFIX) the SELECTION.\n"
 
         let l:extra = s:ring_get_extra()
+        let l:payload = {'CONTEXT': join(l:extra, "\n"), 'PREFIX': join(l:prefix, "\n"), 'SELECTION': join(l:selection, "\n"), 'SUFFIX': join(l:suffix, "\n")}
 
-        let l:payload = {'CONTENT': join(l:extra, "\n"), 'SELECTION': join(a:lines, "\n")}
         let l:system_prompt .= "\n" . json_encode(l:payload) . "\n"
 
         let l:system_message = {
@@ -1290,11 +1294,12 @@ function! llama#inst_build(lines, inst, inst_prev = [])
     return l:messages
 endfunction
 
-function! llama#inst(start, end)
-    let l:lines = getline(a:start, a:end)
+function! llama#inst(l0, l1)
+    let l:l0 = a:l0
+    let l:l1 = a:l1
 
     " while the user is providing an instruction, send a warm-up request
-    let l:messages = llama#inst_build(l:lines, '')
+    let l:messages = llama#inst_build(l:l0, l:l1, '')
 
     let l:request = {
         \ 'id_slot':      0,
@@ -1349,15 +1354,12 @@ function! llama#inst(start, end)
     let l:req_id = s:inst_req_id
     let s:inst_req_id += 1
 
-    let l:start = a:start
-    let l:end = min([a:end, line('$')])
-
     let l:bufnr = bufnr('%')
 
     let l:req = {
         \ 'id': l:req_id,
         \ 'bufnr': l:bufnr,
-        \ 'range': [l:start, l:end],
+        \ 'range': [l:l0, l:l1],
         \ 'status': 'proc',
         \ 'result': '',
         \ 'inst': l:inst,
@@ -1373,9 +1375,9 @@ function! llama#inst(start, end)
     " highlights the selected text
     if s:ghost_text_nvim
         let l:ns = nvim_create_namespace('vt_inst')
-        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, l:start - 1, 0, {
-            \ 'end_row': l:end - 1,
-            \ 'end_col': len(getline(l:end)),
+        let l:req.extmark = nvim_buf_set_extmark(l:bufnr, l:ns, l:l0 - 1, 0, {
+            \ 'end_row': l:l1 - 1,
+            \ 'end_col': len(getline(l:l1)),
             \ 'hl_group': 'llama_hl_inst_src'
             \ })
     elseif s:ghost_text_vim
@@ -1385,11 +1387,9 @@ function! llama#inst(start, end)
     " Initialize virtual text with processing status
     call s:inst_update(l:req_id, 'proc')
 
-    let l:messages = llama#inst_build(l:lines, l:inst)
+    let l:req.inst_prev = llama#inst_build(l:l0, l:l1, l:inst)
 
-    let l:req.inst_prev = l:messages
-
-    call llama#inst_send(l:req_id, l:messages)
+    call llama#inst_send(l:req_id, l:req.inst_prev)
 endfunction
 
 function! llama#inst_send(req_id, messages)
@@ -1467,6 +1467,10 @@ function! llama#inst_update_pos(req)
 endfunction
 
 function! s:inst_update(id, status)
+    if !has_key(s:inst_reqs, a:id)
+        return
+    endif
+
     let l:req = s:inst_reqs[a:id]
 
     let l:req.status = a:status
@@ -1531,8 +1535,6 @@ function! s:inst_update(id, status)
 endfunction
 
 function! s:inst_on_response(id, job_id, data, event = v:null)
-    call s:inst_update(a:id, 'gen')
-
     if has('nvim')
         let l:lines = a:data
     else
@@ -1579,19 +1581,29 @@ function! s:inst_on_response(id, job_id, data, event = v:null)
         endtry
     endfor
 
+    if !has_key(s:inst_reqs, a:id)
+        return
+    endif
+
+    call s:inst_update(a:id, 'gen')
+
     let l:req = s:inst_reqs[a:id]
+
     if !empty(l:content)
         let l:req.result .= l:content
     endif
+
     let l:req.n_gen = l:req.n_gen + 1
 endfunction
 
 function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
     if a:exit_code != 0
-        echohl ErrorMsg
-        echo "Instruct job failed with exit code: " . a:exit_code
-        echohl None
+        echom "Instruct job failed with exit code: " . a:exit_code
         call s:inst_remove(a:id)
+        return
+    endif
+
+    if !has_key(s:inst_reqs, a:id)
         return
     endif
 
@@ -1611,12 +1623,17 @@ function! s:inst_remove(id)
             if l:req.extmark_virt != -1
                 call nvim_buf_del_extmark(l:req.bufnr, l:ns, l:req.extmark_virt)
             endif
+            call jobstop(l:req.job)
+        elseif s:ghost_text_vim
+            " TODO: implement classic Vim support
+            call job_stop(l:req.job)
         endif
+
         call remove(s:inst_reqs, a:id)
     endif
 endfunction
 
-function! s:inst_callback(bufnr, start, end, result)
+function! s:inst_callback(bufnr, l0, l1, result)
     let l:result_lines = split(a:result, "\n", 1)
 
     " Remove trailing empty lines
@@ -1625,13 +1642,13 @@ function! s:inst_callback(bufnr, start, end, result)
     endwhile
 
     let l:num_result = len(l:result_lines)
-    let l:num_original = a:end - a:start + 1
+    let l:num_original = a:l1 - a:l0 + 1
 
     " Delete the original range
-    call deletebufline(a:bufnr, a:start, a:end)
+    call deletebufline(a:bufnr, a:l0, a:l1)
 
     " Insert the new lines
-    call append(a:start - 1, l:result_lines)
+    call append(a:l0 - 1, l:result_lines)
 endfunction
 
 function! llama#inst_accept()
@@ -1691,7 +1708,6 @@ function! llama#inst_continue()
         call llama#inst_update_pos(l:req)
 
         if l:req.status == 'ready' && l:lnum >= l:req.range[0] && l:lnum <= l:req.range[1]
-            let l:lines = getline(l:req.range[0], l:req.range[1])
             let l:inst = input('Next instruction: ')
             if empty(l:inst)
                 return
@@ -1706,9 +1722,9 @@ function! llama#inst_continue()
 
             call s:inst_update(l:req.id, 'proc')
 
-            let l:messages = llama#inst_build(l:lines, l:inst, l:req.inst_prev)
+            let l:req.inst_prev = llama#inst_build(l:req.range[0], l:req.range[1], l:inst, l:req.inst_prev)
 
-            call llama#inst_send(l:req.id, l:messages)
+            call llama#inst_send(l:req.id, l:req.inst_prev)
             return
         endif
     endfor
