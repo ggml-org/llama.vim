@@ -12,6 +12,8 @@ Local LLM-assisted text completion.
 
 https://github.com/user-attachments/assets/641a6e72-f1a2-4fe5-b0fd-c2597c6f4cdc
 
+https://github.com/user-attachments/assets/68bff15b-2d91-4800-985d-b7f110a0ccb7
+
 ---
 
 ## Features
