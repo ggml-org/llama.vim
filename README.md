@@ -19,13 +19,11 @@ https://github.com/user-attachments/assets/641a6e72-f1a2-4fe5-b0fd-c2597c6f4cdc
 - Auto-suggest on cursor movement in `Insert` mode
 - Accept a suggestion with `Tab`
 - Accept the first line of a suggestion with `Shift+Tab`
-- Instruction-based editing (instruct mode) with `<leader>lli`
+- Instruction-based editing with `<leader>lli`
 - Control max text generation time
 - Configure scope of context around the cursor
 - Ring context with chunks from open and edited files and yanked text
 - [Supports very large contexts even on low-end hardware via smart context reuse](https://github.com/ggml-org/llama.cpp/pull/9787)
-- Speculative FIM support
-- Speculative Decoding support
 - Display performance stats
 
 ## Installation
