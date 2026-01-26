@@ -190,17 +190,37 @@ function! llama#disable()
     autocmd! llama
 
     " TODO: these unmaps don't seem to work properly
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_trigger
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_full
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_line
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
+    if g:llama_config.keymap_fim_trigger != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_trigger
+    endif
+    if g:llama_config.keymap_fim_accept_full != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_full
+    endif
+    if g:llama_config.keymap_fim_accept_line != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_line
+    endif
+    if g:llama_config.keymap_fim_accept_word != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
+    endif
 
-    exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
-    exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_rerun
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
+    if g:llama_config.keymap_debug_toggle != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
+    endif
+    if g:llama_config.keymap_inst_trigger != ''
+        exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
+    endif
+    if g:llama_config.keymap_inst_rerun != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_rerun
+    endif
+    if g:llama_config.keymap_inst_continue != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
+    endif
+    if g:llama_config.keymap_inst_accept != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
+    endif
+    if g:llama_config.keymap_inst_cancel != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
+    endif
 
     let s:llama_enabled = v:false
 
@@ -1191,9 +1211,15 @@ function! s:fim_render(pos_x, pos_y, data)
     endif
 
     " setup accept shortcuts
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    if g:llama_config.keymap_fim_accept_full != ''
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+    endif
+    if g:llama_config.keymap_fim_accept_line != ''
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+    endif
+    if g:llama_config.keymap_fim_accept_word != ''
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    endif
 
     let s:fim_hint_shown = v:true
 
@@ -1270,9 +1296,15 @@ function! llama#fim_hide()
     endif
 
     " remove the mappings
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_line
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
+    if g:llama_config.keymap_fim_accept_full != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
+    endif
+    if g:llama_config.keymap_fim_accept_line != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_line
+    endif
+    if g:llama_config.keymap_fim_accept_word != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
+    endif
 endfunction
 
 " =====================================
