@@ -1228,7 +1228,7 @@ function! llama#fim_accept(accept_type)
         elseif a:accept_type == 'line' || len(l:content) == 1
             " move cursor for 1-line suggestion
             call cursor(l:pos_y, l:pos_x + len(l:content[0]) + 1)
-            if len(l:content) > 2
+            if len(l:content) > 1
                 " simulate pressing Enter to move to next line
                 call feedkeys("\<CR>")
             endif
