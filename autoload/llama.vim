@@ -1406,7 +1406,7 @@ function! llama#inst_send(req_id, messages)
         \ 'messages':     a:messages,
         \ 'min_p':        0.1,
         \ 'temperature':  0.1,
-        \ 'samplers':     ["min_p", "temp"],
+        \ 'samplers':     ["min_p", "temperature"],
         \ 'stream':       v:true,
         \ 'cache_prompt': v:true,
         \ }
