@@ -49,7 +49,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   ring_scope:       the range around the cursor position (in number of lines) for gathering chunks after FIM
 "   ring_update_ms:   how often to process queued chunks in normal mode
 "
-" keymaps parameters:
+" keymaps parameters (empty string to disable):
 "
 "   keymap_fim_trigger:     keymap to trigger the completion, default: <C-F>
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
@@ -322,14 +322,28 @@ function! llama#enable()
     endif
 
     " setup keymaps
-    exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
+    if g:llama_config.keymap_fim_trigger != ''
+        exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
+    endif
+    if g:llama_config.keymap_debug_toggle != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
+    endif
 
-    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger  .. " :LlamaInstruct<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_rerun    .. " :call llama#inst_rerun()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept   .. " :call llama#inst_accept()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel   .. " :call llama#inst_cancel()<CR>"
+    if g:llama_config.keymap_inst_trigger != ''
+        exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger  .. " :LlamaInstruct<CR>"
+    endif
+    if g:llama_config.keymap_inst_rerun != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_rerun    .. " :call llama#inst_rerun()<CR>"
+    endif
+    if g:llama_config.keymap_inst_continue != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
+    endif
+    if g:llama_config.keymap_inst_accept != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept   .. " :call llama#inst_accept()<CR>"
+    endif
+    if g:llama_config.keymap_inst_cancel != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel   .. " :call llama#inst_cancel()<CR>"
+    endif
 
     call llama#setup_autocmds()
 
