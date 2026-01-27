@@ -49,7 +49,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   ring_scope:       the range around the cursor position (in number of lines) for gathering chunks after FIM
 "   ring_update_ms:   how often to process queued chunks in normal mode
 "
-" keymaps parameters:
+" keymaps parameters (empty string to disable):
 "
 "   keymap_fim_trigger:     keymap to trigger the completion, default: <C-F>
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
@@ -190,17 +190,37 @@ function! llama#disable()
     autocmd! llama
 
     " TODO: these unmaps don't seem to work properly
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_trigger
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_full
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_line
-    exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
+    if g:llama_config.keymap_fim_trigger != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_trigger
+    endif
+    if g:llama_config.keymap_fim_accept_full != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_full
+    endif
+    if g:llama_config.keymap_fim_accept_line != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_line
+    endif
+    if g:llama_config.keymap_fim_accept_word != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
+    endif
 
-    exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
-    exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_rerun
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
-    exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
+    if g:llama_config.keymap_debug_toggle != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_debug_toggle
+    endif
+    if g:llama_config.keymap_inst_trigger != ''
+        exe "silent! vunmap          " .. g:llama_config.keymap_inst_trigger
+    endif
+    if g:llama_config.keymap_inst_rerun != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_rerun
+    endif
+    if g:llama_config.keymap_inst_continue != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_continue
+    endif
+    if g:llama_config.keymap_inst_accept != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_accept
+    endif
+    if g:llama_config.keymap_inst_cancel != ''
+        exe "silent!  unmap          " .. g:llama_config.keymap_inst_cancel
+    endif
 
     let s:llama_enabled = v:false
 
@@ -322,14 +342,28 @@ function! llama#enable()
     endif
 
     " setup keymaps
-    exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
+    if g:llama_config.keymap_fim_trigger != ''
+        exe "autocmd InsertEnter * inoremap <buffer> <expr> <silent> " . g:llama_config.keymap_fim_trigger . " llama#fim_inline(v:false, v:false)"
+    endif
+    if g:llama_config.keymap_debug_toggle != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_debug_toggle .. " :call llama#debug_toggle()<CR>"
+    endif
 
-    exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger  .. " :LlamaInstruct<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_rerun    .. " :call llama#inst_rerun()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept   .. " :call llama#inst_accept()<CR>"
-    exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel   .. " :call llama#inst_cancel()<CR>"
+    if g:llama_config.keymap_inst_trigger != ''
+        exe "vnoremap <silent> " .. g:llama_config.keymap_inst_trigger  .. " :LlamaInstruct<CR>"
+    endif
+    if g:llama_config.keymap_inst_rerun != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_rerun    .. " :call llama#inst_rerun()<CR>"
+    endif
+    if g:llama_config.keymap_inst_continue != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_continue .. " :call llama#inst_continue()<CR>"
+    endif
+    if g:llama_config.keymap_inst_accept != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_accept   .. " :call llama#inst_accept()<CR>"
+    endif
+    if g:llama_config.keymap_inst_cancel != ''
+        exe "nnoremap <silent> " .. g:llama_config.keymap_inst_cancel   .. " :call llama#inst_cancel()<CR>"
+    endif
 
     call llama#setup_autocmds()
 
@@ -1177,9 +1211,15 @@ function! s:fim_render(pos_x, pos_y, data)
     endif
 
     " setup accept shortcuts
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
-    exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    if g:llama_config.keymap_fim_accept_full != ''
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+    endif
+    if g:llama_config.keymap_fim_accept_line != ''
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+    endif
+    if g:llama_config.keymap_fim_accept_word != ''
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+    endif
 
     let s:fim_hint_shown = v:true
 
@@ -1256,9 +1296,15 @@ function! llama#fim_hide()
     endif
 
     " remove the mappings
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_line
-    exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
+    if g:llama_config.keymap_fim_accept_full != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
+    endif
+    if g:llama_config.keymap_fim_accept_line != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_line
+    endif
+    if g:llama_config.keymap_fim_accept_word != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
+    endif
 endfunction
 
 " =====================================
