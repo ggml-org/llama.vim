@@ -1307,6 +1307,10 @@ function! llama#fim_hide()
     endif
 endfunction
 
+function! llama#is_fim_hint_shown()
+    return s:fim_hint_shown
+endfunction
+
 " =====================================
 " Instruct-based editing
 " =====================================
