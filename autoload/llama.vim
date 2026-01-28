@@ -1307,6 +1307,7 @@ function! llama#fim_hide()
     endif
 endfunction
 
+" ref: https://github.com/ggml-org/llama.vim/pull/85
 function! llama#is_fim_hint_shown()
     return s:fim_hint_shown
 endfunction
