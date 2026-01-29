@@ -245,7 +245,39 @@ function! llama#toggle_auto_fim()
     call llama#setup_autocmds()
 endfunction
 
+function! llama#command(line1, line2, subcommand) abort
+    if a:subcommand ==# 'enable'
+        call llama#enable()
+    elseif a:subcommand ==# 'disable'
+        call llama#disable()
+    elseif a:subcommand ==# 'toggle'
+        call llama#toggle()
+    elseif a:subcommand ==# 'toggle-auto-fim'
+        call llama#toggle_auto_fim()
+    elseif a:subcommand ==# 'debug-toggle'
+        call llama#debug_toggle()
+    elseif a:subcommand ==# 'debug-clear'
+        call llama#debug_clear()
+    elseif a:subcommand ==# 'instruct'
+        call llama#inst(a:line1, a:line2)
+    else
+        echohl ErrorMsg
+        echo 'Unknown Llama subcommand: ' . a:subcommand
+        echohl None
+    endif
+endfunction
+
+" Tab completion options for :Llama command.
+function! llama#completions(arg_lead, _cmd_line, _cursor_pos) abort
+    let l:options = ['enable', 'disable', 'toggle', 'toggle-auto-fim', 'debug-toggle', 'debug-clear', 'instruct']
+    " Filter options that start with what the user typed
+    return filter(copy(l:options), 'v:val =~# "^" . a:arg_lead')
+endfunction
+
 function! llama#setup()
+    " Define :Llama command with tab completion and range support.
+    command! -range=% -nargs=1 -complete=customlist,llama#completions Llama call llama#command(<line1>, <line2>, <q-args>)
+
     command! LlamaEnable         call llama#enable()
     command! LlamaDisable        call llama#disable()
     command! LlamaToggle         call llama#toggle()
