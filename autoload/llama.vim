@@ -187,11 +187,6 @@ endfunction
 function! llama#disable()
     call llama#fim_hide()
 
-    " Clear the statusline if show_info was set to 1
-    if g:llama_config.show_info == 1
-        set statusline=
-    endif
-
     autocmd! llama
 
     " TODO: these unmaps don't seem to work properly
@@ -1298,6 +1293,11 @@ function! llama#fim_hide()
     elseif s:ghost_text_vim
         call prop_remove({'type': s:hlgroup_hint, 'all': v:true})
         call prop_remove({'type': s:hlgroup_info, 'all': v:true})
+    endif
+
+    " Clear the statusline if show_info was set to 1
+    if g:llama_config.show_info == 1
+        set statusline=
     endif
 
     " remove the mappings
