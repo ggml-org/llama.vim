@@ -1277,9 +1277,20 @@ function! llama#inst_build(l0, l1, inst, inst_prev = [])
         let l:system_prompt .= "You are a text-editing assistant. Respond ONLY with the result of applying INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text indentation. Do not add extra code blocks. Respond only with the modified block. If the INSTRUCTION is a question, answer it directly. Do not output any extra separators. Consider the local context before (PREFIX) and after (SUFFIX) the SELECTION.\n"
 
         let l:extra = s:ring_get_extra()
-        let l:payload = {'CONTEXT': join(l:extra, "\n"), 'PREFIX': join(l:prefix, "\n"), 'SELECTION': join(l:selection, "\n"), 'SUFFIX': join(l:suffix, "\n")}
 
-        let l:system_prompt .= "\n" . json_encode(l:payload) . "\n"
+        " note: this has side effects as it escapes newlines and quotes, which prevents does not work well with context-based speculative approaches
+        "let l:payload = {'CONTEXT': join(l:extra, "\n"), 'PREFIX': join(l:prefix, "\n"), 'SELECTION': join(l:selection, "\n"), 'SUFFIX': join(l:suffix, "\n")}
+        "let l:system_prompt .= "\n" . json_encode(l:payload) . "\n"
+
+        let l:system_prompt .= "\n"
+        let l:system_prompt .= "--- CONTEXT     " . repeat('-', 40) . "\n"
+        let l:system_prompt .= join(l:extra, "\n") . "\n"
+        let l:system_prompt .= "--- PREFIX      " . repeat('-', 40) . "\n"
+        let l:system_prompt .= join(l:prefix, "\n") . "\n"
+        let l:system_prompt .= "--- SELECTION   " . repeat('-', 40) . "\n"
+        let l:system_prompt .= join(l:selection, "\n") . "\n"
+        let l:system_prompt .= "--- SUFFIX      " . repeat('-', 40) . "\n"
+        let l:system_prompt .= join(l:suffix, "\n") . "\n"
 
         let l:system_message = {
             \ 'role': 'system',
