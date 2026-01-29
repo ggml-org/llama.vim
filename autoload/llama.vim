@@ -1295,6 +1295,11 @@ function! llama#fim_hide()
         call prop_remove({'type': s:hlgroup_info, 'all': v:true})
     endif
 
+    " Clear the statusline if show_info was set to 1
+    if g:llama_config.show_info == 1
+        set statusline=
+    endif
+
     " remove the mappings
     if g:llama_config.keymap_fim_accept_full != ''
         exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
