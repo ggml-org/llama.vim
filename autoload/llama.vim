@@ -187,6 +187,11 @@ endfunction
 function! llama#disable()
     call llama#fim_hide()
 
+    " Clear the statusline if show_info was set to 1
+    if g:llama_config.show_info == 1
+        set statusline=
+    endif
+
     autocmd! llama
 
     " TODO: these unmaps don't seem to work properly
