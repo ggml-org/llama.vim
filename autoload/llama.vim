@@ -296,11 +296,24 @@ function! llama#init()
         let s:hlgroup_hint = 'llama_hl_fim_hint'
         let s:hlgroup_info = 'llama_hl_fim_info'
 
+        let s:hlgroup_inst      = 'llama_hl_inst_src'
+        let s:hlgroup_inst_info = 'llama_hl_inst_info'
+
         if empty(prop_type_get(s:hlgroup_hint))
             call prop_type_add(s:hlgroup_hint, {'highlight': s:hlgroup_hint})
         endif
         if empty(prop_type_get(s:hlgroup_info))
             call prop_type_add(s:hlgroup_info, {'highlight': s:hlgroup_info})
+        endif
+        if empty(prop_type_get(s:hlgroup_inst))
+            call prop_type_add(s:hlgroup_inst, {'highlight': s:hlgroup_inst})
+        endif
+
+        if !hlexists(s:hlgroup_inst_info)
+            highlight link llama_hl_inst_info Comment
+        endif
+        if empty(prop_type_get(s:hlgroup_inst_info))
+            call prop_type_add(s:hlgroup_inst_info, {'highlight': s:hlgroup_inst_info})
         endif
     endif
 
@@ -1456,7 +1469,12 @@ function! llama#inst(l0, l1)
             \ 'hl_group': 'llama_hl_inst_src'
             \ })
     elseif s:ghost_text_vim
-        " TODO: implement classic Vim support
+        let l:prop_id = prop_add(l:l0, 1, {
+            \ 'type': 'llama_hl_inst_src',
+            \ 'end_lnum': l:l1,
+            \ 'end_col': len(getline(l:l1)) + 1
+            \ })
+        let l:req.extmark = l:prop_id
     endif
 
     " Initialize virtual text with processing status
@@ -1605,7 +1623,41 @@ function! s:inst_update(id, status)
                 \ })
         endif
     elseif s:ghost_text_vim
-        " TODO: implement classic Vim support
+        if l:req.extmark_virt != -1
+             call prop_remove({
+                \ 'type': 'llama_hl_inst_info',
+                \ 'id': l:req.extmark_virt,
+                \ 'bufnr': l:req.bufnr
+                \ })
+        endif
+
+        let l:text = ''
+
+        if a:status == 'proc'
+            let l:text = ' ⏳ Processing... (' . g:llama_config.model_inst . ')'
+        elseif a:status == 'gen'
+            let l:preview = substitute(l:req.result, '.*\n\s*', '', '')
+            " Truncate if too long so it fits on screen
+            if len(l:preview) > 40
+                let l:preview = l:preview[:37] . '...'
+            endif
+            let l:text = printf(' ⏳ Generating (%d tokens): %s', l:req.n_gen, l:preview)
+        elseif a:status == 'ready'
+            let l:text = ' ✅ Ready! Press <Tab> to accept.'
+        endif
+
+        let l:prop_id = 9000 + a:id
+
+        call prop_add(l:req.range[1], 0, {
+            \ 'type': 'llama_hl_inst_info',
+            \ 'id': l:prop_id,
+            \ 'bufnr': l:req.bufnr,
+            \ 'text': l:text,
+            \ 'text_align': 'after',
+            \ 'text_padding_left': 2
+            \ })
+
+        let l:req.extmark_virt = l:prop_id
     endif
 endfunction
 
@@ -1700,7 +1752,16 @@ function! s:inst_remove(id)
             endif
             call jobstop(l:req.job)
         elseif s:ghost_text_vim
-            " TODO: implement classic Vim support
+            call prop_remove({
+                \ 'type': 'llama_hl_inst_src',
+                \ 'bufnr': l:req.bufnr
+                \ })
+
+            call prop_remove({
+                \ 'type': 'llama_hl_inst_info',
+                \ 'bufnr': l:req.bufnr
+                \ })
+
             call job_stop(l:req.job)
         endif
 
@@ -1734,8 +1795,8 @@ function! llama#inst_accept()
             call llama#inst_update_pos(l:req)
 
             if l:line >= l:req.range[0] && l:line <= l:req.range[1]
-                call s:inst_callback(l:req.bufnr, l:req.range[0], l:req.range[1], l:req.result)
                 call s:inst_remove(l:req.id)
+                call s:inst_callback(l:req.bufnr, l:req.range[0], l:req.range[1], l:req.result)
                 return
             endif
         endif
