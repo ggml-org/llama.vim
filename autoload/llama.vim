@@ -1373,10 +1373,15 @@ function! llama#inst(l0, l1)
     let l:l0 = a:l0
     let l:l1 = a:l1
 
+    " create request state
+    let l:req_id = s:inst_req_id
+    let s:inst_req_id += 1
+
     " while the user is providing an instruction, send a warm-up request
     let l:messages = llama#inst_build(l:l0, l:l1, '')
 
     let l:request = {
+        \ 'id_slot':      l:req_id,
         \ 'messages':     l:messages,
         \ 'samplers':     [],
         \ 'n_predict':    0,
@@ -1424,10 +1429,6 @@ function! llama#inst(l0, l1)
 
     call llama#debug_log('inst_send | ' . l:inst)
 
-    " Create request state
-    let l:req_id = s:inst_req_id
-    let s:inst_req_id += 1
-
     let l:bufnr = bufnr('%')
 
     let l:req = {
@@ -1470,6 +1471,7 @@ function! llama#inst_send(req_id, messages)
     call llama#debug_log('inst_send', join(a:messages, "\n"))
 
     let l:request = {
+        \ 'id_slot':      a:req_id,
         \ 'messages':     a:messages,
         \ 'min_p':        0.1,
         \ 'temperature':  0.1,
