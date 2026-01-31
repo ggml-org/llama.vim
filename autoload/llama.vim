@@ -1453,10 +1453,10 @@ function! llama#inst(l0, l1)
             \ })
     elseif s:ghost_text_vim
         let l:prop_id = prop_add(l:l0, 1, {
-        \ 'type': 'llama_hl_inst_src',
-        \ 'end_lnum': l:l1,
-        \ 'end_col': len(getline(l:l1)) + 1
-        \ })
+            \ 'type': 'llama_hl_inst_src',
+            \ 'end_lnum': l:l1,
+            \ 'end_col': len(getline(l:l1)) + 1
+            \ })
         let l:req.extmark = l:prop_id
     endif
 
@@ -1617,7 +1617,6 @@ function! s:inst_update(id, status)
 
         if a:status == 'proc'
             let l:text = ' ⏳ Processing... (' . g:llama_config.model_inst . ')'
-
         elseif a:status == 'gen'
             let l:preview = substitute(l:req.result, '.*\n\s*', '', '')
             " Truncate if too long so it fits on screen
@@ -1625,7 +1624,6 @@ function! s:inst_update(id, status)
                 let l:preview = l:preview[:37] . '...'
             endif
             let l:text = printf(' ⏳ Generating (%d tokens): %s', l:req.n_gen, l:preview)
-
         elseif a:status == 'ready'
             let l:text = ' ✅ Ready! Press <Tab> to accept.'
         endif
