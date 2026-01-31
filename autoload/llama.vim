@@ -1779,19 +1779,8 @@ function! llama#inst_accept()
             call llama#inst_update_pos(l:req)
 
             if l:line >= l:req.range[0] && l:line <= l:req.range[1]
-                if s:ghost_text_vim
-                    call prop_remove({
-                        \ 'type': 'llama_hl_inst_src',
-                        \ 'bufnr': l:req.bufnr
-                        \ })
-                    call prop_remove({
-                        \ 'type': 'llama_hl_inst_info',
-                        \ 'bufnr': l:req.bufnr
-                        \ })
-                endif
-
-                call s:inst_callback(l:req.bufnr, l:req.range[0], l:req.range[1], l:req.result)
                 call s:inst_remove(l:req.id)
+                call s:inst_callback(l:req.bufnr, l:req.range[0], l:req.range[1], l:req.result)
                 return
             endif
         endif
