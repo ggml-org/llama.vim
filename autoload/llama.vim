@@ -245,11 +245,143 @@ function! llama#toggle_auto_fim()
     call llama#setup_autocmds()
 endfunction
 
+function! llama#status()
+    let l:fim_base = substitute(g:llama_config.endpoint_fim, '/infill$', '', '')
+    let l:inst_base = substitute(g:llama_config.endpoint_inst, '/v1/chat/completions$', '', '')
+
+    let s:status_messages = {'fim': '', 'inst': '', 'count': 0}
+
+    " If both endpoints are the same then we are running llama-server as a
+    " router. Otherwise each are independent servers.
+    if l:fim_base ==# l:inst_base
+        let l:models_url = l:fim_base . '/v1/models'
+        call s:fetch_status(l:models_url, 'both')
+    else
+        let l:fim_url = l:fim_base . '/v1/models'
+        let l:inst_url = l:inst_base . '/v1/models'
+
+        call s:fetch_status(l:fim_url, 'fim')
+        call s:fetch_status(l:inst_url, 'inst')
+    endif
+endfunction
+
+function! s:fetch_status(url, type)
+    let l:curl_command = [
+        \ "curl",
+        \ "--silent",
+        \ "--max-time", "3",
+        \ "--request", "GET",
+        \ "--url", a:url,
+        \ ]
+
+    if s:ghost_text_nvim
+        let l:job = jobstart(l:curl_command, {
+            \ 'on_stdout': function('s:status_on_response', [a:type]),
+            \ 'on_exit': function('s:status_on_exit', [a:type]),
+            \ 'stdout_buffered': v:true
+            \ })
+    elseif s:ghost_text_vim
+        let l:job = job_start(l:curl_command, {
+            \ 'out_cb': function('s:status_on_response', [a:type]),
+            \ 'exit_cb': function('s:status_on_exit', [a:type])
+            \ })
+    endif
+endfunction
+
+function! s:status_on_response(type, job_id, data, event = v:null)
+    if s:ghost_text_nvim
+        let l:raw = join(a:data, "\n")
+    elseif s:ghost_text_vim
+        let l:raw = a:data
+    endif
+
+    if empty(l:raw)
+        return
+    endif
+
+    try
+        let l:response = json_decode(l:raw)
+        let l:models = get(l:response, 'data', [])
+
+        if a:type ==# 'both'
+            let l:fim_status = s:get_model_status(g:llama_config.model_fim, l:models)
+            let l:inst_status = s:get_model_status(g:llama_config.model_inst, l:models)
+            echo 'FIM model: ' . l:fim_status . ', Instruction model: ' . l:inst_status
+        elseif a:type ==# 'fim'
+            let l:fim_status = s:get_model_status(g:llama_config.model_fim, l:models)
+            let s:status_messages.fim = 'FIM model: ' . l:fim_status
+            let s:status_messages.count += 1
+            call s:display_status_if_ready()
+        elseif a:type ==# 'inst'
+            let l:inst_status = s:get_model_status(g:llama_config.model_inst, l:models)
+            let s:status_messages.inst = 'Instruction model: ' . l:inst_status
+            let s:status_messages.count += 1
+            call s:display_status_if_ready()
+        endif
+    catch
+        echom 'Error parsing status response: ' . v:exception
+    endtry
+endfunction
+
+function! s:status_on_exit(type, job_id, exit_code, event = v:null)
+    if a:exit_code != 0
+        call llama#debug_log('status_on_exit (' . a:type . '): curl failed with exit code ' . a:exit_code)
+        if a:type ==# 'both'
+            echo 'LlamaStatus: ❌ Server not reachable'
+        elseif a:type ==# 'fim'
+            let s:status_messages.fim = 'FIM server: ❌ Not reachable'
+            let s:status_messages.count += 1
+            call s:display_status_if_ready()
+        elseif a:type ==# 'inst'
+            let s:status_messages.inst = 'Instruction server: ❌ Not reachable'
+            let s:status_messages.count += 1
+            call s:display_status_if_ready()
+        endif
+    endif
+endfunction
+
+function! s:display_status_if_ready()
+    " Wait for both FIM and instruction responses.
+    if s:status_messages.count >= 2
+        echo s:status_messages.fim . ', ' . s:status_messages.inst
+    endif
+endfunction
+
+function! s:get_model_status(model_name, models)
+    if empty(a:model_name)
+        return '❌ Not configured'
+    endif
+
+    for l:model in a:models
+        if get(l:model, 'id', '') ==# a:model_name
+            if has_key(l:model, 'status')
+                let l:status_value = get(get(l:model, 'status', {}), 'value', 'unknown')
+                return l:status_value ==# 'loaded' ? '✅ Ready' : l:status_value
+            else
+                return '✅ Ready'
+            endif
+        endif
+    endfor
+
+    if len(a:models) == 1
+        let l:model = a:models[0]
+        if has_key(l:model, 'status')
+            let l:status_value = get(get(l:model, 'status', {}), 'value', 'unknown')
+            return l:status_value ==# 'loaded' ? '✅ Ready' : l:status_value
+        else
+            return '✅ Ready'
+        endif
+    endif
+
+    return '❌ Not loaded'
+endfunction
+
 function! llama#setup()
     command! LlamaEnable         call llama#enable()
     command! LlamaDisable        call llama#disable()
     command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
+    command! LlamaStatus         call llama#status()
 
     command! -range=% LlamaInstruct call llama#inst(<line1>, <line2>)
 
