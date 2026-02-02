@@ -133,7 +133,4 @@ endfunction
 
 function! llama_debug#setup() abort
     call llama_debug#clear()
-
-    command! LlamaDebugClear  call llama_debug#clear()
-    command! LlamaDebugToggle call llama_debug#toggle()
 endfunction
