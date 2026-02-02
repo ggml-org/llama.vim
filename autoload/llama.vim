@@ -255,9 +255,9 @@ function! llama#command(line1, line2, subcommand) abort
     elseif a:subcommand ==# 'toggle-auto-fim'
         call llama#toggle_auto_fim()
     elseif a:subcommand ==# 'debug-toggle'
-        call llama#debug_toggle()
+        call llama_debug#toggle()
     elseif a:subcommand ==# 'debug-clear'
-        call llama#debug_clear()
+        call llama_debug#clear()
     elseif a:subcommand ==# 'instruct'
         call llama#inst(a:line1, a:line2)
     else
@@ -277,13 +277,6 @@ endfunction
 function! llama#setup()
     " Define :Llama command with tab completion and range support.
     command! -range=% -nargs=1 -complete=customlist,llama#completions Llama call llama#command(<line1>, <line2>, <q-args>)
-
-    command! LlamaEnable         call llama#enable()
-    command! LlamaDisable        call llama#disable()
-    command! LlamaToggle         call llama#toggle()
-    command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
-
-    command! -range=% LlamaInstruct call llama#inst(<line1>, <line2>)
 
     call llama#debug_setup()
 endfunction
