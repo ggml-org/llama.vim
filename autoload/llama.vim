@@ -1145,7 +1145,13 @@ function! s:fim_render(pos_x, pos_y, data)
     "    endif
     "endfor
 
-    let l:content[-1] .= l:line_cur_suffix
+    " only add suffix if not already there to workaround confused llms,
+    " only match if word chars are in the suffix to avoid miscounting brackets
+    " or other important punctuation from correct llm output,
+    " may need tweaking if a bad pattern comes up
+    if !(l:content[-1] =~# '\V' . escape(l:line_cur_suffix, '/\') . '\$' && l:line_cur_suffix =~# '\w\w' )
+        let l:content[-1] .= l:line_cur_suffix
+    endif
 
     " if only whitespaces - do not accept
     if join(l:content, "\n") =~? '^\s*$'
