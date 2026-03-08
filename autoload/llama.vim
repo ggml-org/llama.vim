@@ -306,15 +306,15 @@ function! s:status_on_response(type, job_id, data, event = v:null)
         if a:type ==# 'both'
             let l:fim_status = s:get_model_status(g:llama_config.model_fim, l:models)
             let l:inst_status = s:get_model_status(g:llama_config.model_inst, l:models)
-            echo 'FIM model: ' . l:fim_status . ', Instruction model: ' . l:inst_status
+            echo 'FIM model (' . g:llama_config.model_fim . '): ' . l:fim_status . ', Instruction model (' . g:llama_config.model_inst . '): ' . l:inst_status
         elseif a:type ==# 'fim'
             let l:fim_status = s:get_model_status(g:llama_config.model_fim, l:models)
-            let s:status_messages.fim = 'FIM model: ' . l:fim_status
+            let s:status_messages.fim = 'FIM model (' . g:llama_config.model_fim . '): ' . l:fim_status
             let s:status_messages.count += 1
             call s:display_status_if_ready()
         elseif a:type ==# 'inst'
             let l:inst_status = s:get_model_status(g:llama_config.model_inst, l:models)
-            let s:status_messages.inst = 'Instruction model: ' . l:inst_status
+            let s:status_messages.inst = 'Instruction model (' . g:llama_config.model_inst . '): ' . l:inst_status
             let s:status_messages.count += 1
             call s:display_status_if_ready()
         endif
