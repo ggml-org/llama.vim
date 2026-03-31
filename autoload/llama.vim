@@ -575,11 +575,11 @@ function! s:ring_update()
         \ "--data", "@-",
         \ ]
 
-    if exists ("g:llama_config.model_fim") && len("g:llama_config.model_fim") > 0
+    if exists ("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
         let l:request['model'] = g:llama_config.model_fim
     end
 
-    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+    if exists ("g:llama_config.api_key") && len(g:llama_config.api_key) > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
 
@@ -834,11 +834,11 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ "--data", "@-",
         \ ]
 
-    if exists ("g:llama_config.model_fim") && len("g:llama_config.model_fim") > 0
+    if exists ("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
         let l:request['model'] = g:llama_config.model_fim
     end
 
-    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+    if exists ("g:llama_config.api_key") && len(g:llama_config.api_key) > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
 
