@@ -527,7 +527,7 @@ endfunction
 function! s:ring_update()
     call timer_start(g:llama_config.ring_update_ms, {-> s:ring_update()})
 
-    " update only if in normal mode or if the cursor hasn't moved for a while
+    " skip update if not in normal model and the cursor has moved recently
     if mode() !=# 'n' && reltimefloat(reltime(s:t_last_move)) < 3.0
         return
     endif
