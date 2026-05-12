@@ -1218,7 +1218,7 @@ endfunction
 " render a suggestion at the current cursor location
 " a:responses  - list of response objects from cache
 " a:selected   - index of the currently selected completion
-" a:fuzzy      - v:true if this is a fuzzy/nearby match (no cycling)
+" a:fuzzy      - v:true if this is a fuzzy/nearby match (suppress [N/M] in info bar)
 function! s:fim_render(pos_x, pos_y, responses, selected, fuzzy)
     " do not show if there is a completion in progress
     if pumvisible()
@@ -1443,14 +1443,13 @@ function! s:fim_render(pos_x, pos_y, responses, selected, fuzzy)
         exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
     endif
 
-    " setup cycle shortcuts (only when multiple completions available and not fuzzy)
-    if !a:fuzzy && len(a:responses) > 1
-        if g:llama_config.keymap_fim_next != ''
-            exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_next . ' llama#fim_cycle(1)'
-        endif
-        if g:llama_config.keymap_fim_prev != ''
-            exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_prev . ' llama#fim_cycle(-1)'
-        endif
+    " setup cycle shortcuts (always, to prevent <C-J>/<C-K> from moving the cursor)
+    " llama#fim_cycle returns '' early when there is nothing to cycle
+    if g:llama_config.keymap_fim_next != ''
+        exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_next . ' llama#fim_cycle(1)'
+    endif
+    if g:llama_config.keymap_fim_prev != ''
+        exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_prev . ' llama#fim_cycle(-1)'
     endif
 
     let s:fim_hint_shown = v:true
