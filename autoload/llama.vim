@@ -1158,7 +1158,7 @@ function! s:fim_try_hint(pos_x, pos_y)
 
     if l:responses isnot v:null && len(l:responses) > 0
         " exact match found - render with cycling support
-        call s:fim_render(l:pos_x, l:pos_y, l:responses, 0, v:false)
+        call s:fim_render(l:pos_x, l:pos_y, l:responses, 0)
 
         " run async speculative FIM in the background for this position
         if s:fim_hint_shown
@@ -1206,7 +1206,7 @@ function! s:fim_try_hint(pos_x, pos_y)
 
     if l:best_resp isnot v:null
         " single nearby match found - render without cycling
-        call s:fim_render(l:pos_x, l:pos_y, [l:best_resp], 0, v:false)
+        call s:fim_render(l:pos_x, l:pos_y, [l:best_resp], 0)
 
         " run async speculative FIM in the background for this position
         if s:fim_hint_shown
@@ -1218,8 +1218,7 @@ endfunction
 " render a suggestion at the current cursor location
 " a:responses  - list of response objects from cache
 " a:selected   - index of the currently selected completion
-" a:fuzzy      - v:true if this is a fuzzy/nearby match (suppress [N/M] in info bar)
-function! s:fim_render(pos_x, pos_y, responses, selected, fuzzy)
+function! s:fim_render(pos_x, pos_y, responses, selected)
     " do not show if there is a completion in progress
     if pumvisible()
         return
@@ -1366,9 +1365,9 @@ function! s:fim_render(pos_x, pos_y, responses, selected, fuzzy)
     if g:llama_config.show_info > 0 && l:has_info
         let l:prefix = '   '
 
-        " append completion index when multiple completions are available and not fuzzy
+        " append completion index when multiple completions are available
         let l:cmpl_idx = ''
-        if !a:fuzzy && len(a:responses) > 1
+        if len(a:responses) > 1
             let l:cmpl_idx = printf(' [%d/%d]', a:selected + 1, len(a:responses))
         endif
 
@@ -1463,7 +1462,6 @@ function! s:fim_render(pos_x, pos_y, responses, selected, fuzzy)
     let s:fim_data['content']     = l:content
     let s:fim_data['responses']   = a:responses
     let s:fim_data['selected']    = a:selected
-    let s:fim_data['fuzzy']       = a:fuzzy
 endfunction
 
 " if accept_type == 'full', accept entire response
@@ -1573,7 +1571,7 @@ function! llama#fim_cycle(direction)
     let s:fim_data['selected'] = (s:fim_data['selected'] + a:direction + l:n) % l:n
 
     call s:fim_render(s:fim_data['pos_x'], s:fim_data['pos_y'],
-        \ s:fim_data['responses'], s:fim_data['selected'], s:fim_data['fuzzy'])
+        \ s:fim_data['responses'], s:fim_data['selected'])
 
     return ''
 endfunction
