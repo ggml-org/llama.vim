@@ -25,6 +25,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   n_predict:        max number of tokens to predict
 "   stop_strings_fim  return the result immediately as soon as any of these strings are encountered in the generated text for FIM completions
 "   stop_strings_inst return the result immediately as soon as any of these strings are encountered in the generated text for instruction completions
+"   n_cmpl:           number of completions to cache per position (ring buffer, default: 1)
 "   t_max_prompt_ms:  max alloted time for the prompt processing (TODO: not yet supported)
 "   t_max_predict_ms: max alloted time for the prediction
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
@@ -56,6 +57,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_fim_next:        keymap to cycle to next completion,  default: <C-J>
+"   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-K>
 "   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
 "   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
 "   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
@@ -74,6 +77,7 @@ let s:default_config = {
     \ 'n_predict':              128,
     \ 'stop_strings_fim':       [],
     \ 'stop_strings_inst':      [],
+    \ 'n_cmpl':                 1,
     \ 't_max_prompt_ms':        500,
     \ 't_max_predict_ms':       1000,
     \ 'show_info':              2,
@@ -88,6 +92,8 @@ let s:default_config = {
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
     \ 'keymap_fim_accept_word': "<leader>ll]",
+    \ 'keymap_fim_next':        "<C-J>",
+    \ 'keymap_fim_prev':        "<C-K>",
     \ 'keymap_inst_trigger':    "<leader>lli",
     \ 'keymap_inst_rerun':      "<leader>llr",
     \ 'keymap_inst_continue':   "<leader>llc",
@@ -130,14 +136,17 @@ let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 let s:llama_enabled = v:false
 
 " containes cached responses from the server
+" each key maps to a ring buffer of up to n_cmpl individual completion responses
 " used to avoid re-computing the same completions and to also create new completions with similar context
 " ref: https://github.com/ggml-org/llama.vim/pull/18
 let g:cache_data = {}
 let g:cache_lru_order = []
 
-function! s:cache_insert(key, value)
-    " Check if we need to evict an entry
-    if len(keys(g:cache_data)) > (g:llama_config.max_cache_keys - 1)
+" insert a single completion response into the cache ring buffer for a key
+" the ring buffer holds up to g:llama_config.n_cmpl entries per key
+function! s:cache_insert(key, response)
+    " Check if we need to evict a key
+    if !has_key(g:cache_data, a:key) && len(keys(g:cache_data)) >= g:llama_config.max_cache_keys
         " Get the least recently used key (first in order list)
         let l:lru_key = g:cache_lru_order[0]
         " Remove from cache data
@@ -146,15 +155,31 @@ function! s:cache_insert(key, value)
         call remove(g:cache_lru_order, 0)
     endif
 
-    " Update the cache
-    let g:cache_data[a:key] = a:value
+    " Initialize ring buffer for this key if needed
+    if !has_key(g:cache_data, a:key)
+        let g:cache_data[a:key] = []
+    endif
+
+    " skip if a completion with the same content already exists for this key
+    let l:new_content = get(a:response, 'content', '')
+    for l:existing in g:cache_data[a:key]
+        if get(l:existing, 'content', '') ==# l:new_content
+            return
+        endif
+    endfor
+
+    " Add to ring buffer, evict oldest if full
+    if len(g:cache_data[a:key]) >= g:llama_config.n_cmpl
+        call remove(g:cache_data[a:key], 0)
+    endif
+    call add(g:cache_data[a:key], a:response)
 
     " Update LRU order - remove key if it exists and add to end (most recent)
     call filter(g:cache_lru_order, 'v:val !=# a:key')
     call add(g:cache_lru_order, a:key)
 endfunction
 
-" Helper function to get cache value and update LRU order
+" Get all cached completions for a key (ring buffer), or v:null if not found
 function! s:cache_get(key)
     if !has_key(g:cache_data, a:key)
         return v:null
@@ -165,6 +190,15 @@ function! s:cache_get(key)
     call add(g:cache_lru_order, a:key)
 
     return g:cache_data[a:key]
+endfunction
+
+" Count total cached entries across all keys
+function! s:cache_count()
+    let l:total = 0
+    for l:entries in values(g:cache_data)
+        let l:total += len(l:entries)
+    endfor
+    return l:total
 endfunction
 
 " get the number of leading spaces of a string
@@ -204,6 +238,12 @@ function! llama#disable()
     endif
     if g:llama_config.keymap_fim_accept_word != ''
         exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_accept_word
+    endif
+    if g:llama_config.keymap_fim_next != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_next
+    endif
+    if g:llama_config.keymap_fim_prev != ''
+        exe "silent! iunmap <buffer> " .. g:llama_config.keymap_fim_prev
     endif
 
     if g:llama_config.keymap_debug_toggle != ''
@@ -900,7 +940,8 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
     " if we already have a cached completion for one of the hashes, don't send a request
     if a:use_cache
         for l:hash in l:hashes
-            if s:cache_get(l:hash) != v:null
+            let l:cached = s:cache_get(l:hash)
+            if l:cached isnot v:null && len(l:cached) > 0
                 return
             endif
         endfor
@@ -936,6 +977,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ 'prompt':           l:middle,
         \ 'n_predict':        g:llama_config.n_predict,
         \ 'stop':             g:llama_config.stop_strings_fim,
+        \ 'n_cmpl':           g:llama_config.n_cmpl,
         \ 'n_indent':         l:indent,
         \ 'top_k':            40,
         \ 'top_p':            0.90,
@@ -1039,24 +1081,34 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
     endif
 
     " ensure the response is valid JSON, starting with a fast check before full decode
-    if l:raw !~# '^\s*{' || l:raw !~# '\v"content"\s*:"'
+    " n_cmpl == 1 returns a single object {"content": ...}, n_cmpl > 1 returns an array [{"content": ...}, ...]
+    if (l:raw !~# '^\s*{' && l:raw !~# '^\s*\[') || l:raw !~# '\v"content"\s*:"'
         return
     endif
     try
-        let l:response = json_decode(l:raw)
+        let l:decoded = json_decode(l:raw)
     catch
         return
     endtry
 
-    " put the response in the cache
+    " normalize to list of response objects
+    if type(l:decoded) == v:t_dict
+        let l:responses = [l:decoded]
+    else
+        let l:responses = l:decoded
+    endif
+
+    " insert each response into the cache ring buffer
     for l:hash in a:hashes
-        call s:cache_insert(l:hash, l:raw)
+        for l:resp in l:responses
+            call s:cache_insert(l:hash, l:resp)
+        endfor
     endfor
 
     " if nothing is currently displayed - show the hint directly
     if !s:fim_hint_shown || !s:fim_data['can_accept']
         " log only non-speculative fims for now
-        call llama#debug_log('fim_on_response', get(json_decode(l:raw), 'content', ''))
+        call llama#debug_log('fim_on_response', get(l:responses[0], 'content', ''))
 
         let l:pos_x = col('.') - 1
         let l:pos_y = line('.')
@@ -1100,49 +1152,61 @@ function! s:fim_try_hint(pos_x, pos_y)
     let l:middle = l:ctx_local['middle']
     let l:suffix = l:ctx_local['suffix']
 
+    " Phase 1: exact match at current position
     let l:hash = sha256(l:prefix . l:middle . 'Î' . l:suffix)
+    let l:responses = s:cache_get(l:hash)
 
-    " Check if the completion is cached (and update LRU order)
-    let l:raw = s:cache_get(l:hash)
+    if l:responses isnot v:null && len(l:responses) > 0
+        " exact match found - render with cycling support
+        call s:fim_render(l:pos_x, l:pos_y, l:responses, 0, v:false)
 
-    " ... or if there is a cached completion nearby (128 characters behind)
-    " Looks at the previous 128 characters to see if a completion is cached. If one is found at (x,y)
-    " then it checks that the characters typed after (x,y) match up with the cached completion result.
-    if l:raw == v:null
-        let l:pm = l:prefix . l:middle
-        let l:best = 0
-
-        for i in range(128)
-            let l:removed = l:pm[-(1 + i):]
-            let l:ctx_new = l:pm[:-(2 + i)] . 'Î' . l:suffix
-
-            let l:hash_new = sha256(l:ctx_new)
-            let l:response_cached = s:cache_get(l:hash_new)
-            if l:response_cached != v:null
-                if l:response_cached == ""
-                    continue
-                endif
-
-                let l:response = json_decode(l:response_cached)
-                if l:response['content'][0:i] !=# l:removed
-                    continue
-                endif
-
-                let l:response['content'] = l:response['content'][i + 1:]
-                if len(l:response['content']) > 0
-                    if l:raw == v:null
-                        let l:raw = json_encode(l:response)
-                    elseif len(l:response['content']) > l:best
-                        let l:best = len(l:response['content'])
-                        let l:raw = json_encode(l:response)
-                    endif
-                endif
-            endif
-        endfor
+        " run async speculative FIM in the background for this position
+        if s:fim_hint_shown
+            call llama#fim(l:pos_x, l:pos_y, v:true, s:fim_data['content'], v:true)
+        endif
+        return
     endif
 
-    if l:raw != v:null
-        call s:fim_render(l:pos_x, l:pos_y, l:raw)
+    " Phase 2: nearby match - search for a cached completion whose start matches what was typed
+    " only pick the single best match, no cycling
+    let l:pm = l:prefix . l:middle
+    let l:best_len = 0
+    let l:best_resp = v:null
+    let l:best_offset = -1
+
+    for i in range(128)
+        let l:typed = l:pm[-(1 + i):]
+        let l:ctx_new = l:pm[:-(2 + i)] . 'Î' . l:suffix
+        let l:hash_new = sha256(l:ctx_new)
+
+        let l:cached = s:cache_get(l:hash_new)
+        if l:cached is v:null
+            continue
+        endif
+
+        " try each cached completion for this nearby key
+        for l:resp in l:cached
+            let l:content = get(l:resp, 'content', '')
+            if len(l:content) <= i
+                continue
+            endif
+            if strpart(l:content, 0, i + 1) !=# l:typed
+                continue
+            endif
+
+            let l:remainder = strpart(l:content, i + 1)
+            if len(l:remainder) > l:best_len
+                let l:best_len = len(l:remainder)
+                let l:best_resp = copy(l:resp)
+                let l:best_resp['content'] = l:remainder
+                let l:best_offset = i
+            endif
+        endfor
+    endfor
+
+    if l:best_resp isnot v:null
+        " single nearby match found - render without cycling
+        call s:fim_render(l:pos_x, l:pos_y, [l:best_resp], 0, v:false)
 
         " run async speculative FIM in the background for this position
         if s:fim_hint_shown
@@ -1152,13 +1216,26 @@ function! s:fim_try_hint(pos_x, pos_y)
 endfunction
 
 " render a suggestion at the current cursor location
-function! s:fim_render(pos_x, pos_y, data)
+" a:responses  - list of response objects from cache
+" a:selected   - index of the currently selected completion
+" a:fuzzy      - v:true if this is a fuzzy/nearby match (no cycling)
+function! s:fim_render(pos_x, pos_y, responses, selected, fuzzy)
     " do not show if there is a completion in progress
     if pumvisible()
         return
     endif
 
-    let l:raw = a:data
+    " clear previous virtual text (needed when cycling completions)
+    let l:bufnr = bufnr('%')
+    if s:ghost_text_nvim
+        let l:id_vt_fim = nvim_create_namespace('vt_fim')
+        call nvim_buf_clear_namespace(l:bufnr, l:id_vt_fim, 0, -1)
+    elseif s:ghost_text_vim
+        call prop_remove({'type': s:hlgroup_hint, 'all': v:true})
+        call prop_remove({'type': s:hlgroup_info, 'all': v:true})
+    endif
+
+    let l:response = a:responses[a:selected]
 
     let l:can_accept = v:true
     let l:has_info   = v:false
@@ -1174,35 +1251,31 @@ function! s:fim_render(pos_x, pos_y, data)
     let l:content = []
 
     " get the generated suggestion
-    if l:can_accept
-        let l:response = json_decode(l:raw)
+    for l:part in split(get(l:response, 'content', ''), "\n", 1)
+        call add(l:content, l:part)
+    endfor
 
-        for l:part in split(get(l:response, 'content', ''), "\n", 1)
-            call add(l:content, l:part)
-        endfor
+    " remove trailing new lines
+    while len(l:content) > 0 && l:content[-1] == ""
+        call remove(l:content, -1)
+    endwhile
 
-        " remove trailing new lines
-        while len(l:content) > 0 && l:content[-1] == ""
-            call remove(l:content, -1)
-        endwhile
+    let l:n_cached  = get(l:response, 'tokens_cached', 0)
+    let l:truncated = get(l:response, 'timings/truncated', v:false)
 
-        let l:n_cached  = get(l:response, 'tokens_cached', 0)
-        let l:truncated = get(l:response, 'timings/truncated', v:false)
+    " if response.timings is available
+    if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
+        \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
+        let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
+        let l:t_prompt_ms = str2float(get(l:response, 'timings/prompt_ms', '1.0'))
+        let l:s_prompt    = str2float(get(l:response, 'timings/prompt_per_second', '0.0'))
 
-        " if response.timings is available
-        if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
-            \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
-            let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
-            let l:t_prompt_ms = str2float(get(l:response, 'timings/prompt_ms', '1.0'))
-            let l:s_prompt    = str2float(get(l:response, 'timings/prompt_per_second', '0.0'))
-
-            let l:n_predict    = get(l:response, 'timings/predicted_n', 0)
-            let l:t_predict_ms = str2float(get(l:response, 'timings/predicted_ms', '1.0'))
-            let l:s_predict    = str2float(get(l:response, 'timings/predicted_per_second', '0.0'))
-        endif
-
-        let l:has_info = v:true
+        let l:n_predict    = get(l:response, 'timings/predicted_n', 0)
+        let l:t_predict_ms = str2float(get(l:response, 'timings/predicted_ms', '1.0'))
+        let l:s_predict    = str2float(get(l:response, 'timings/predicted_per_second', '0.0'))
     endif
+
+    let l:has_info = v:true
 
     if len(l:content) == 0
         call add(l:content, "")
@@ -1287,31 +1360,32 @@ function! s:fim_render(pos_x, pos_y, data)
         let l:can_accept = v:false
     endif
 
-    " display virtual text with the suggestion
-    let l:bufnr = bufnr('%')
-
-    if s:ghost_text_nvim
-        let l:id_vt_fim = nvim_create_namespace('vt_fim')
-    endif
-
     let l:info = ''
 
     " construct the info message
     if g:llama_config.show_info > 0 && l:has_info
         let l:prefix = '   '
 
+        " append completion index when multiple completions are available and not fuzzy
+        let l:cmpl_idx = ''
+        if !a:fuzzy && len(a:responses) > 1
+            let l:cmpl_idx = printf(' [%d/%d]', a:selected + 1, len(a:responses))
+        endif
+
         if l:truncated
-            let l:info = printf("%s | WARNING: the context is full: %d, increase the server context size or reduce g:llama_config.ring_n_chunks",
+            let l:info = printf("%s | WARNING: the context is full: %d, increase the server context size or reduce g:llama_config.ring_n_chunks%s",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
-                \ l:n_cached
+                \ l:n_cached,
+                \ l:cmpl_idx
                 \ )
         else
-            let l:info = printf("%s | c: %d, r: %d/%d, e: %d, q: %d/16, C: %d/%d | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s)",
+            let l:info = printf("%s | c: %d, r: %d/%d, e: %d, q: %d/16, C: %d | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s)%s",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
                 \ l:n_cached,  len(s:ring_chunks), g:llama_config.ring_n_chunks, s:ring_n_evict, len(s:ring_queued),
-                \ len(keys(g:cache_data)), g:llama_config.max_cache_keys,
+                \ s:cache_count(),
                 \ l:n_prompt,  l:t_prompt_ms,  l:s_prompt,
-                \ l:n_predict, l:t_predict_ms, l:s_predict
+                \ l:n_predict, l:t_predict_ms, l:s_predict,
+                \ l:cmpl_idx
                 \ )
         endif
 
@@ -1369,15 +1443,28 @@ function! s:fim_render(pos_x, pos_y, data)
         exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
     endif
 
+    " setup cycle shortcuts (only when multiple completions available and not fuzzy)
+    if !a:fuzzy && len(a:responses) > 1
+        if g:llama_config.keymap_fim_next != ''
+            exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_next . ' llama#fim_cycle(1)'
+        endif
+        if g:llama_config.keymap_fim_prev != ''
+            exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_prev . ' llama#fim_cycle(-1)'
+        endif
+    endif
+
     let s:fim_hint_shown = v:true
 
-    let s:fim_data['pos_x']  = l:pos_x
-    let s:fim_data['pos_y']  = l:pos_y
+    let s:fim_data['pos_x']       = l:pos_x
+    let s:fim_data['pos_y']       = l:pos_y
 
-    let s:fim_data['line_cur'] = l:line_cur
+    let s:fim_data['line_cur']    = l:line_cur
 
-    let s:fim_data['can_accept'] = l:can_accept
-    let s:fim_data['content']    = l:content
+    let s:fim_data['can_accept']  = l:can_accept
+    let s:fim_data['content']     = l:content
+    let s:fim_data['responses']   = a:responses
+    let s:fim_data['selected']    = a:selected
+    let s:fim_data['fuzzy']       = a:fuzzy
 endfunction
 
 " if accept_type == 'full', accept entire response
@@ -1458,11 +1545,38 @@ function! llama#fim_hide()
     if g:llama_config.keymap_fim_accept_word != ''
         exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
     endif
+    if g:llama_config.keymap_fim_next != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_next
+    endif
+    if g:llama_config.keymap_fim_prev != ''
+        exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_prev
+    endif
 endfunction
 
 " ref: https://github.com/ggml-org/llama.vim/pull/85
 function! llama#is_fim_hint_shown()
     return s:fim_hint_shown
+endfunction
+
+" cycle to the next/previous completion
+" a:direction - 1 for next, -1 for previous
+" returns '' for <expr> mapping to consume the key
+function! llama#fim_cycle(direction)
+    if !s:fim_hint_shown
+        return ''
+    endif
+
+    let l:n = len(s:fim_data['responses'])
+    if l:n <= 1
+        return ''
+    endif
+
+    let s:fim_data['selected'] = (s:fim_data['selected'] + a:direction + l:n) % l:n
+
+    call s:fim_render(s:fim_data['pos_x'], s:fim_data['pos_y'],
+        \ s:fim_data['responses'], s:fim_data['selected'], s:fim_data['fuzzy'])
+
+    return ''
 endfunction
 
 " =====================================

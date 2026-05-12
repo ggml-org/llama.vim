@@ -19,6 +19,8 @@ Default Shortcut
 - Tab         - accept the current suggestion
 - Shift+Tab   - accept just the first line of the suggestion
 - <leader>ll] - accept just the first word of the suggestion
+- <C-J>       - cycle to next completion (when multiple are available)
+- <C-K>       - cycle to previous completion (when multiple are available)
 - <leader>llf - trigger FIM completion manually
 - <leader>lli - trigger instruction-based editing (instruct mode)
 - <leader>llr - rerun the instruction
@@ -113,6 +115,7 @@ Currently the default config is:
 		    \ 'n_prefix':               256,
 		    \ 'n_suffix':               64,
 		    \ 'n_predict':              128,
+		    \ 'n_cmpl':                 1,
 		    \ 'stop_strings':           [],
 		    \ 't_max_prompt_ms':        500,
 		    \ 't_max_predict_ms':       1000,
@@ -128,6 +131,8 @@ Currently the default config is:
 		    \ 'keymap_fim_accept_full': "<Tab>",
 		    \ 'keymap_fim_accept_line': "<S-Tab>",
 		    \ 'keymap_fim_accept_word': "<leader>ll]",
+		    \ 'keymap_fim_next':        "<C-J>",
+		    \ 'keymap_fim_prev':        "<C-K>",
 		    \ 'keymap_inst_trigger':    "<leader>lli",
 		    \ 'keymap_inst_rerun':      "<leader>llr",
 		    \ 'keymap_inst_continue':   "<leader>llc",
@@ -157,6 +162,12 @@ Currently the default config is:
 						in the local suffix
 
 - {n_predict}			max number of tokens to predict
+
+- {n_cmpl}			number of completions to cache per position (ring buffer).
+					set to 2 or 3 for multiple options that you can cycle
+					through with Ctrl-J/Ctrl-K. Each request generates this
+					many completions (requires server with n_cmpl support).
+					(default: 1)
 
 - {stop_strings}		return the result immediately as soon as any of these
 						strings are encountered in the generated text
@@ -204,6 +215,10 @@ keymaps parameters:
 - {keymap_fim_accept_line}	keymap to accept line suggestion, default: <S-Tab>
 
 - {keymap_fim_accept_word}	keymap to accept word suggestion, default: <C-B>
+
+- {keymap_fim_next}		keymap to cycle to next completion, default: <C-J>
+
+- {keymap_fim_prev}		keymap to cycle to previous completion, default: <C-K>
 
 - {keymap_inst_trigger}		keymap to trigger instruction-based editing, default: null
 
