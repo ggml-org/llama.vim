@@ -396,7 +396,7 @@ function! s:get_model_status(model_name, models)
     endif
 
     for l:model in a:models
-        if get(l:model, 'id', '') ==# a:model_name
+        if get(l:model, 'id', '') ==# a:model_name || index(get(l:model, 'tags', []), a:model_name) >= 0 || index(get(l:model, 'aliases', []), a:model_name) >= 0
             if has_key(l:model, 'status')
                 let l:status_value = get(get(l:model, 'status', {}), 'value', 'unknown')
                 return l:status_value ==# 'loaded' ? '✅ Ready' : l:status_value
