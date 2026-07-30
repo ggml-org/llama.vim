@@ -116,7 +116,8 @@ Currently the default config is:
 		    \ 'n_suffix':               64,
 		    \ 'n_predict':              128,
 		    \ 'n_cmpl':                 1,
-		    \ 'stop_strings':           [],
+		    \ 'stop_strings_fim':       [],
+ 			\ 'stop_strings_inst':      [],
 		    \ 't_max_prompt_ms':        500,
 		    \ 't_max_predict_ms':       1000,
 		    \ 'show_info':              2,
@@ -169,8 +170,11 @@ Currently the default config is:
 					many completions (requires server with n_cmpl support).
 					(default: 1)
 
-- {stop_strings}		return the result immediately as soon as any of these
-						strings are encountered in the generated text
+- {stop_strings_fim}	return the result immediately as soon as any of these
+						strings are encountered in the generated text for FIM completions
+
+- {stop_strings_inst}	return the result immediately as soon as any of these
+						strings are encountered in the generated text for instruction completions
 
 - {t_max_prompt_ms}		max alloted time for the prompt processing
 						(TODO: not yet supported)
@@ -261,7 +265,8 @@ Example:
 					n_suffix = 1024,
 					auto_fim = false,
 					keymap_fim_accept_full = "<C-S>",
-					stop_strings = { "\n" },
+					stop_strings_fim = { "\n" },
+					stop_strings_inst = { "\n" },
 					enable_at_startup = false,
 				}
 			end,
