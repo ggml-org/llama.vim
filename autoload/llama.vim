@@ -33,6 +33,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
 "   max_cache_keys:   max number of cached completions to keep in result_cache
 "   enable_at_startup: enable llama.vim functionality at startup (default: v:true)
+"   inst_virt_line_width: max display width for wrapped instruction virtual lines (number, or 'full' for the window width)
 "
 " ring buffer of chunks, accumulated with time upon:
 "
@@ -84,6 +85,7 @@ let s:default_config = {
     \ 'auto_fim':               v:true,
     \ 'max_line_suffix':        8,
     \ 'max_cache_keys':         250,
+    \ 'inst_virt_line_width':   'full',
     \ 'ring_n_chunks':          16,
     \ 'ring_chunk_size':        64,
     \ 'ring_scope':             1024,
@@ -1810,6 +1812,66 @@ function! llama#inst_update_pos(req)
     endif
 endfunction
 
+function! s:inst_virt_line_width(bufnr)
+    let l:cfg = get(g:llama_config, 'inst_virt_line_width', 'full')
+
+    " window text width (excluding the gutter), or 0 if the buffer is not shown
+    let l:win_width = 0
+    let l:win_info = getwininfo(bufwinid(a:bufnr))
+    if !empty(l:win_info)
+        let l:win_width = l:win_info[0].width - l:win_info[0].textoff
+    endif
+
+    " 'full': use the whole window text width (fall back to 160 if unknown)
+    if type(l:cfg) == v:t_string && l:cfg ==? 'full'
+        return max([1, l:win_width > 0 ? l:win_width : 160])
+    endif
+
+    let l:max_width = max([1, l:cfg])
+    return l:win_width > 0 ? max([1, min([l:max_width, l:win_width])]) : l:max_width
+endfunction
+
+function! s:inst_wrap_virt_text(text, width)
+    let l:width = max([1, a:width])
+
+    if strdisplaywidth(a:text) <= l:width
+        return [a:text]
+    endif
+
+    let l:lines = []
+    let l:line = ''
+
+    for l:char in split(a:text, '\zs')
+        if l:line !=# '' && strdisplaywidth(l:line . l:char) > l:width
+            call add(l:lines, l:line)
+            let l:line = l:char
+        else
+            let l:line .= l:char
+        endif
+    endfor
+
+    call add(l:lines, l:line)
+    return l:lines
+endfunction
+
+function! s:inst_wrap_virt_lines(virt_lines, width)
+    let l:wrapped = []
+
+    for l:virt_line in a:virt_lines
+        if len(l:virt_line) == 1 && type(l:virt_line[0]) == v:t_list && len(l:virt_line[0]) >= 2
+            let l:text = l:virt_line[0][0]
+            let l:hl = l:virt_line[0][1]
+            for l:line in s:inst_wrap_virt_text(l:text, a:width)
+                call add(l:wrapped, [[l:line, l:hl]])
+            endfor
+        else
+            call add(l:wrapped, l:virt_line)
+        endif
+    endfor
+
+    return l:wrapped
+endfunction
+
 function! s:inst_update(id, status)
     if !has_key(s:inst_reqs, a:id)
         return
@@ -1869,6 +1931,7 @@ function! s:inst_update(id, status)
 
         if !empty(l:virt_lines)
             let l:virt_lines = l:virt_lines + [[[l:sep, l:hl]]]
+            let l:virt_lines = s:inst_wrap_virt_lines(l:virt_lines, s:inst_virt_line_width(l:req.bufnr))
             let l:req.extmark_virt = nvim_buf_set_extmark(l:req.bufnr, l:ns, l:req.range[1] - 1, 0, {
                 \ 'virt_lines': l:virt_lines
                 \ })

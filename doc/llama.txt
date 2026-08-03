@@ -124,6 +124,7 @@ Currently the default config is:
 		    \ 'auto_fim':               v:true,
 		    \ 'max_line_suffix':        8,
 		    \ 'max_cache_keys':         250,
+		    \ 'inst_virt_line_width':   'full',
 		    \ 'ring_n_chunks':          16,
 		    \ 'ring_chunk_size':        64,
 		    \ 'ring_scope':             1024,
@@ -183,6 +184,11 @@ Currently the default config is:
 
 - {show_info}			show extra info about the inference
 						(0 - disabled, 1 - statusline, 2 - inline)
+
+- {inst_virt_line_width}	max display width for wrapped instruction virtual
+						lines. If the current window text area is narrower,
+						the window width is used instead. Set to 'full' to
+						always use the window text width.
 
 - {auto_fim}			trigger FIM completion automatically on cursor movement
 
