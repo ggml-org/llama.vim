@@ -1406,8 +1406,8 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
             \ 'virt_lines': map(l:content[1:], {idx, val -> [[val, 'llama_hl_fim_hint']]})
             \ })
     elseif s:ghost_text_vim
-        " NOTE: avoid adding text props with empty text - in Vim these render as
-        " garbage bytes at the anchor position
+        " note: avoid adding text props with empty text - vim produces garbage
+        " ref: https://github.com/ggml-org/llama.vim/pull/134/
         let l:new_suffix = l:content[0][0:-len(l:line_cur[l:pos_x:])-1]
         if !empty(l:new_suffix)
             call prop_add(l:pos_y, l:pos_x + 1, {
