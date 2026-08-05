@@ -82,7 +82,7 @@ let s:default_config = {
     \ 't_max_prompt_ms':        500,
     \ 't_max_predict_ms':       1000,
     \ 'show_info':              2,
-    \ 'info_compact':           0,
+    \ 'info_compact':           3,
     \ 'auto_fim':               v:true,
     \ 'max_line_suffix':        8,
     \ 'max_cache_keys':         250,

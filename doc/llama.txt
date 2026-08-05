@@ -121,6 +121,7 @@ Currently the default config is:
 		    \ 't_max_prompt_ms':        500,
 		    \ 't_max_predict_ms':       1000,
 		    \ 'show_info':              2,
+		    \ 'info_compact':           3,
 		    \ 'auto_fim':               v:true,
 		    \ 'max_line_suffix':        8,
 		    \ 'max_cache_keys':         250,
@@ -183,6 +184,10 @@ Currently the default config is:
 
 - {show_info}			show extra info about the inference
 						(0 - disabled, 1 - statusline, 2 - inline)
+
+- {info_compact}		info message length
+						(0 - full, 1 - short ms and t/s, 2 - remove t/s,
+						3 - also remove e:, q:, C:, 4 - only c: and r:)
 
 - {auto_fim}			trigger FIM completion automatically on cursor movement
 
