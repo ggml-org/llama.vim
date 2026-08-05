@@ -29,6 +29,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   t_max_prompt_ms:  max alloted time for the prompt processing (TODO: not yet supported)
 "   t_max_predict_ms: max alloted time for the prediction
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
+"   info_compact:     info message length (0 - full, 1 - short ms and t/s, 2 - remove t/s, 3 - also remove e:, q:, C:, 4 - only c: and r:)
 "   auto_fim:         trigger FIM completion automatically on cursor movement
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
 "   max_cache_keys:   max number of cached completions to keep in result_cache
@@ -81,6 +82,7 @@ let s:default_config = {
     \ 't_max_prompt_ms':        500,
     \ 't_max_predict_ms':       1000,
     \ 'show_info':              2,
+    \ 'info_compact':           0,
     \ 'auto_fim':               v:true,
     \ 'max_line_suffix':        8,
     \ 'max_cache_keys':         250,
@@ -1378,14 +1380,44 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
                 \ l:cmpl_idx
                 \ )
         else
-            let l:info = printf("%s | c: %d, r: %d/%d, e: %d, q: %d/16, C: %d | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s)%s",
+            " make sure info_compact is in a valid range
+            if g:llama_config.info_compact < 0
+                let g:llama_config.info_compact = 0
+            endif
+            if g:llama_config.info_compact > 4
+                let g:llama_config.info_compact = 4
+            endif
+
+            " always print c: and r:
+            let l:info = printf("%s | c: %d, r: %d/%d",
                 \ g:llama_config.show_info == 2 ? l:prefix : 'llama.vim',
-                \ l:n_cached,  len(s:ring_chunks), g:llama_config.ring_n_chunks, s:ring_n_evict, len(s:ring_queued),
-                \ s:cache_count(),
-                \ l:n_prompt,  l:t_prompt_ms,  l:s_prompt,
-                \ l:n_predict, l:t_predict_ms, l:s_predict,
-                \ l:cmpl_idx
+                \ l:n_cached, len(s:ring_chunks), g:llama_config.ring_n_chunks
                 \ )
+
+            " add e:, q:, C: in compact levels 0 to 2
+            if g:llama_config.info_compact < 3
+                let l:info = l:info . printf(", e: %d, q: %d/16, C: %d",
+                    \ s:ring_n_evict, len(s:ring_queued), s:cache_count()
+                    \ )
+            endif
+
+            " add p: and g: (in varying precision and detail) in compact levels 0 to 3
+            if g:llama_config.info_compact == 0 || g:llama_config.info_compact == 1
+                if g:llama_config.info_compact == 0
+                    let l:template = " | p: %d (%.2f ms, %.2f t/s) | g: %d (%.2f ms, %.2f t/s)%s"
+                elseif g:llama_config.info_compact == 1
+                    let l:template = " | p: %d (%.0f ms, %.0f t/s) | g: %d (%.0f ms, %.0f t/s)%s"
+                endif
+                let l:info = l:info . printf(l:template,
+                    \ l:n_prompt,  l:t_prompt_ms,  l:s_prompt,
+                    \ l:n_predict, l:t_predict_ms, l:s_predict,
+                    \ l:cmpl_idx
+                    \ )
+            elseif g:llama_config.info_compact < 4
+                let l:info = l:info . printf(" | p: %d (%.0f ms) | g: %d (%.0f ms)%s",
+                    \ l:n_prompt, l:t_prompt_ms, l:n_predict, l:t_predict_ms, l:cmpl_idx
+                    \ )
+            endif
         endif
 
         if g:llama_config.show_info == 1
