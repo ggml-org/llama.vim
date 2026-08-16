@@ -17,6 +17,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint_fim:     llama.cpp server endpoint for FIM completion
 "   endpoint_inst:    llama.cpp server endpoint for instruction completion
+"   fim_mode:         FIM completion mode: 'infill' (native /infill endpoint) or 'template' (emulated via /apply-template + /completion)
 "   model_fim:        model name in case when multiple models are loaded (optional, recommended: Qwen3 Coder 30B)
 "   model_inst:       instruction model name (optional, recommended: gpt-oss-120b)
 "   api_key:          llama.cpp server api key (optional)
@@ -70,6 +71,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 let s:default_config = {
     \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
     \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
+    \ 'fim_mode':               'infill',
+    \ 'endpoint_base':          'http://127.0.0.1:8012',
     \ 'model_fim':              '',
     \ 'model_inst':             '',
     \ 'api_key':                '',
@@ -518,11 +521,11 @@ function! llama#setup_autocmds()
         autocmd TextYankPost    * if v:event.operator ==# 'y' | call s:pick_chunk(v:event.regcontents, v:false, v:true) | endif
 
         " gather chunks upon entering/leaving a buffer
-        autocmd BufEnter        * call timer_start(100, {-> s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)})
-        autocmd BufLeave        * call                      s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
+        autocmd BufEnter        * call s:ring_pick_buffer()
+        autocmd BufLeave        * call s:ring_pick_buffer()
 
         " gather chunk upon saving the file
-        autocmd BufWritePost    * call s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
+        autocmd BufWritePost    * call s:ring_pick_buffer()
     augroup END
 endfunction
 
@@ -603,7 +606,18 @@ endfunction
 " no_mod   - do not pick chunks from buffers with pending changes
 " do_evict - evict chunks that are very similar to the new one
 "
+function! s:ring_pick_buffer()
+    call s:pick_chunk(getline(max([1, line('.') - g:llama_config.ring_chunk_size/2]), min([line('.') + g:llama_config.ring_chunk_size/2, line('$')])), v:true, v:true)
+endfunction
+
 function! s:pick_chunk(text, no_mod, do_evict)
+    " Normalize: accept both string (e.g. yank) and list (e.g. getline)
+    if type(a:text) == v:t_string
+        let l:text = split(a:text, "\n", v:true)
+    else
+        let l:text = a:text
+    endif
+
     " do not pick chunks from buffers with pending changes or buffers that are not files
     if a:no_mod && (getbufvar(bufnr('%'), '&modified') || !buflisted(bufnr('%')) || !filereadable(expand('%')))
         return
@@ -615,17 +629,17 @@ function! s:pick_chunk(text, no_mod, do_evict)
     endif
 
     " don't pick very small chunks
-    if len(a:text) < 3
+    if len(l:text) < 3
         return
     endif
 
-    if len(a:text) + 1 < g:llama_config.ring_chunk_size
-        let l:chunk = a:text
+    if len(l:text) + 1 < g:llama_config.ring_chunk_size
+        let l:chunk = l:text
     else
-        let l:l0 = s:rand(0, max([0, len(a:text) - g:llama_config.ring_chunk_size/2]))
-        let l:l1 = min([l:l0 + g:llama_config.ring_chunk_size/2, len(a:text)])
+        let l:l0 = s:rand(0, max([0, len(l:text) - g:llama_config.ring_chunk_size/2]))
+        let l:l1 = min([l:l0 + g:llama_config.ring_chunk_size/2, len(l:text)])
 
-        let l:chunk = a:text[l:l0:l:l1]
+        let l:chunk = l:text[l:l0:l:l1]
     endif
 
     let l:chunk_str = join(l:chunk, "\n") . "\n"
@@ -723,9 +737,15 @@ function! s:ring_update()
     "let &statusline = 'updated context: ' . len(s:ring_chunks) . ' / ' . len(s:ring_queued)
 
     " send asynchronous job with the new extra context so that it is ready for the next FIM
+    " (only for native infill mode; template mode doesn't benefit from warm-up in the same way)
+    if g:llama_config.fim_mode !=# 'template'
+        call s:ring_warmup()
+    endif
+endfunction
+
+function! s:ring_warmup()
     let l:extra = s:ring_get_extra()
 
-    " no samplers needed here
     let l:request = {
         \ 'id_slot':          0,
         \ 'input_prefix':     "",
@@ -754,7 +774,7 @@ function! s:ring_update()
 
     if exists ("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
         let l:request['model'] = g:llama_config.model_fim
-    end
+    endif
 
     if exists ("g:llama_config.api_key") && len(g:llama_config.api_key) > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
@@ -772,6 +792,221 @@ function! s:ring_update()
         call ch_sendraw(channel, l:request_json)
         call ch_close_in(channel)
     endif
+endfunction
+
+" =====================================
+" Template-based FIM emulation helpers
+" =====================================
+
+" Cache for /apply-template results to avoid repeated calls.
+" Key: user message content -> Value: templated prompt
+let s:template_cache_prompt = ''
+let s:template_cache_result = ''
+let s:template_placeholder = 'PLACEHOLDER_' . printf('%08x', rand())
+let s:template_force_start = ''
+
+" Build a grammar string that forces the model to start with forceStart.
+" Each character is escaped to \xNN to avoid any BNF edge cases.
+function! s:fim_template_grammar(forceStart)
+    let l:escaped = ''
+    for i in range(len(a:forceStart))
+        let l:escaped .= '\x' . printf('%02x', char2nr(a:forceStart[i]))
+    endfor
+    return 'root ::= "' . l:escaped . '" any*' . "\n" . 'any ::= [^\x00]'
+endfunction
+
+" Split the last ~50 chars of text before cursor into fakeOutput + forceStart.
+" fakeOutput is injected into the prompt for grounding.
+" forceStart (from last whitespace to end) is forced via grammar for token healing.
+function! s:fim_template_split(before)
+    " Grab last ~50 chars, rounded to start of a paragraph
+    let l:rough_start = max([0, len(a:before) - 50])
+    let l:start = strridx(a:before, "\n", l:rough_start - 1) + 1
+    if l:start < 0
+        let l:start = 0
+    endif
+    let l:tail = a:before[l:start:]
+
+    " Split at last whitespace: forceStart = from last WS to end
+    let l:last_ws = max([strridx(l:tail, ' '), strridx(l:tail, "\n")])
+    if l:last_ws < 0
+        " No whitespace found; use everything as forceStart
+        let l:force_start = l:tail
+        let l:fake_output = ''
+    else
+        let l:force_start = l:tail[l:last_ws:]
+        let l:fake_output = l:tail[:l:last_ws - 1]
+    endif
+
+    return {'fake_output': l:fake_output, 'force_start': l:force_start}
+endfunction
+
+" Call /apply-template synchronously and return the templated prompt.
+" Uses a cache to avoid repeated calls when the user message hasn't changed.
+function! s:fim_template_apply(messages)
+    " Check cache
+    let l:cache_key = json_encode(a:messages)
+    if l:cache_key ==# s:template_cache_prompt
+        return s:template_cache_result
+    endif
+
+    " Build curl command for /apply-template
+    let l:curl_command = [
+        \ "curl",
+        \ "--silent",
+        \ "--request", "POST",
+        \ "--url", g:llama_config.endpoint_base . '/apply-template',
+        \ "--header", "Content-Type: application/json",
+        \ "--data", json_encode({
+        \     'messages': a:messages,
+        \     'chat_template_kwargs': {'enable_thinking': v:false}
+        \ })
+        \ ]
+
+    if exists("g:llama_config.api_key") && len(g:llama_config.api_key) > 0
+        call extend(l:curl_command, ['--header', 'Authorization: Bearer ' . g:llama_config.api_key])
+    endif
+
+    " Log the request
+    call llama#debug_log('fim_template_apply | /apply-template request', json_encode({'messages': a:messages}))
+
+    " Execute synchronously using system() with proper shell escaping
+    let l:cmd_escaped = ''
+    for l:arg in l:curl_command
+        let l:cmd_escaped .= shellescape(l:arg) . ' '
+    endfor
+    let l:result = system(l:cmd_escaped)
+    if v:shell_error != 0
+        call llama#debug_log('fim_template_apply | /apply-template failed', l:result)
+        return ''
+    endif
+
+    let l:data = json_decode(l:result)
+    let l:prompt = get(l:data, 'prompt', '')
+
+    " Log the response
+    call llama#debug_log('fim_template_apply | /apply-template response prompt', l:prompt)
+
+    " Update cache
+    let s:template_cache_prompt = l:cache_key
+    let s:template_cache_result = l:prompt
+
+    return l:prompt
+endfunction
+
+" Build the grounded prompt for /completion using /apply-template.
+" Returns a dict with 'prompt', 'grammar', 'force_start' keys.
+function! s:fim_template_build(prefix, suffix, middle, extra)
+    " Split prefix+middle (all text before cursor) into fakeOutput + forceStart.
+    " This backs up ~50 chars from the cursor to find grounding text.
+    let l:split = s:fim_template_split(a:prefix . a:middle)
+    let l:fake_output = l:split.fake_output
+    let l:force_start = l:split.force_start
+
+    " Trim prefix: remove the fakeOutput+forceStart tail (it goes to assistant grounding instead)
+    let l:prefix_trimmed = a:prefix
+    if !empty(l:fake_output) || !empty(l:force_start)
+        let l:strip_len = len(l:fake_output) + len(l:force_start)
+        let l:prefix_trimmed = a:prefix[:-l:strip_len - 1]
+    endif
+
+    " Build the user message content: stable parts only (no fakeOutput/forceStart)
+    " All sections are numbered context blocks, closed by a single ===END CONTEXT===
+    let l:user = 'Here is the code context for reference. Do not repeat any of it verbatim.' . "\n"
+    let l:n = 1
+
+    " Filter out chunks that overlap with current prefix/suffix
+    let l:filtered_extra = []
+    let l:prefix_stripped = substitute(l:prefix_trimmed, '\s', '', 'g')
+    let l:suffix_stripped = substitute(a:suffix, '\s', '', 'g')
+    for l:chunk in a:extra
+        let l:chunk_stripped = substitute(l:chunk.text, '\s', '', 'g')
+        if stridx(l:prefix_stripped, l:chunk_stripped) >= 0
+                \ || stridx(l:chunk_stripped, l:prefix_stripped) >= 0
+                \ || stridx(l:suffix_stripped, l:chunk_stripped) >= 0
+                \ || stridx(l:chunk_stripped, l:suffix_stripped) >= 0
+            call llama#debug_log('fim_template_build | skipped overlapping chunk (first 80 chars)', strcharpart(l:chunk.text, 0, 80))
+            continue
+        endif
+        call add(l:filtered_extra, l:chunk)
+    endfor
+
+    " Ring buffer chunks
+    for l:chunk in l:filtered_extra
+        let l:user .= '===CONTEXT ' . l:n . '===' . "\n"
+        let l:user .= l:chunk.text
+        let l:n += 1
+    endfor
+
+    " Suffix as a context block (no special label)
+    let l:suffix_clean = substitute(a:suffix, '^\n\+\|\n\+$', '', 'g')
+    if !empty(l:suffix_clean)
+        let l:user .= '===CONTEXT ' . l:n . '===' . "\n"
+        let l:user .= l:suffix_clean . "\n"
+        let l:n += 1
+    endif
+
+    let l:user .= '===END CONTEXT===' . "\n"
+
+    " Prefix as the last context block — ends at the continuation point
+    let l:prefix_clean = substitute(l:prefix_trimmed, '^\n\+\|\n\+$', '', 'g')
+    if !empty(l:prefix_clean)
+        let l:user .= '===PREFIX===\n'
+        let l:user .= l:prefix_clean . "\n"
+    endif
+
+    let l:user .= '===CONTINUE FROM HERE===' . "\n"
+
+    " Build messages with placeholder for assistant response
+    let l:messages = [
+        \ {'role': 'system', 'content': 'You are an expert code completion assistant. The user message contains numbered context blocks (background code from the same or related files) followed by a prefix section. Continue the code naturally from ===CONTINUE FROM HERE===. The context blocks are for reference only — do not repeat or reproduce any of them verbatim in your response. Do not include any markers in your response.'},
+        \ {'role': 'user', 'content': l:user},
+        \ {'role': 'assistant', 'content': s:template_placeholder}
+        \ ]
+
+    " Call /apply-template to get the formatted prompt
+    let l:template_prompt = s:fim_template_apply(l:messages)
+    if l:template_prompt ==# ''
+        return {'prompt': '', 'grammar': '', 'force_start': ''}
+    endif
+
+    " Remove placeholder and everything after it, then append fakeOutput
+    let l:placeholder_idx = stridx(l:template_prompt, s:template_placeholder)
+    if l:placeholder_idx < 0
+        call llama#debug_log('fim_template_build | placeholder not found in templated prompt')
+        return {'prompt': '', 'grammar': '', 'force_start': ''}
+    endif
+
+    let l:prompt = l:template_prompt[:l:placeholder_idx - 1] . l:fake_output
+
+    " Build grammar for token healing
+    let l:grammar = ''
+    if len(l:force_start) > 0
+        let l:grammar = s:fim_template_grammar(l:force_start)
+    endif
+
+    return {'prompt': l:prompt, 'grammar': l:grammar, 'force_start': l:force_start}
+endfunction
+
+" Extract completion content from a /completion response and strip forceStart.
+" Returns a dict with 'content' key (string), compatible with the infill response format.
+function! s:fim_template_extract(response, force_start)
+    let l:content = get(a:response, 'content', '')
+
+    " Strip forceStart from the beginning of the response (char-by-char match)
+    let l:i = 0
+    while l:i < len(l:content) && l:i < len(a:force_start)
+        if l:content[l:i] ==# a:force_start[l:i]
+            let l:i += 1
+        else
+            break
+        endif
+    endwhile
+    if l:i > 0
+        let l:content = l:content[l:i:]
+    endif
+
+    return {'content': l:content}
 endfunction
 
 " =====================================
@@ -971,51 +1206,99 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
 
     let l:extra = s:ring_get_extra()
 
-    let l:request = {
-        \ 'id_slot':          0,
-        \ 'input_prefix':     l:prefix,
-        \ 'input_suffix':     l:suffix,
-        \ 'input_extra':      l:extra,
-        \ 'prompt':           l:middle,
-        \ 'n_predict':        g:llama_config.n_predict,
-        \ 'stop':             g:llama_config.stop_strings_fim,
-        \ 'n_cmpl':           g:llama_config.n_cmpl,
-        \ 'n_indent':         l:indent,
-        \ 'top_k':            40,
-        \ 'top_p':            0.90,
-        \ 'samplers':         ["top_k", "top_p", "infill"],
-        \ 'stream':           v:false,
-        \ 'cache_prompt':     v:true,
-        \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
-        \ 't_max_predict_ms': l:t_max_predict_ms,
-        \ 'response_fields':  [
-        \                       "content",
-        \                       "timings/prompt_n",
-        \                       "timings/prompt_ms",
-        \                       "timings/prompt_per_token_ms",
-        \                       "timings/prompt_per_second",
-        \                       "timings/predicted_n",
-        \                       "timings/predicted_ms",
-        \                       "timings/predicted_per_token_ms",
-        \                       "timings/predicted_per_second",
-        \                       "truncated",
-        \                       "tokens_cached",
-        \                     ],
-        \ }
+    " Build request based on fim_mode
+    if g:llama_config.fim_mode ==# 'template'
+        let l:template_result = s:fim_template_build(l:prefix, l:suffix, l:middle, l:extra)
+        if l:template_result.prompt ==# ''
+            call llama#debug_log('fim_send | template build failed, aborting')
+            return
+        endif
+
+        let l:request = {
+            \ 'prompt':           l:template_result.prompt,
+            \ 'n_predict':        g:llama_config.n_predict,
+            \ 'stop':             g:llama_config.stop_strings_fim,
+            \ 'top_k':            40,
+            \ 'top_p':            0.90,
+            \ 'temperature':      0.1,
+            \ 'stream':           v:false,
+            \ 'cache_prompt':     v:true,
+            \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
+            \ 't_max_predict_ms': l:t_max_predict_ms,
+            \ 'response_fields':  [
+            \                       "content",
+            \                       "timings/prompt_n",
+            \                       "timings/prompt_ms",
+            \                       "timings/prompt_per_token_ms",
+            \                       "timings/prompt_per_second",
+            \                       "timings/predicted_n",
+            \                       "timings/predicted_ms",
+            \                       "timings/predicted_per_token_ms",
+            \                       "timings/predicted_per_second",
+            \                       "truncated",
+            \                       "tokens_cached",
+            \                     ],
+            \ }
+        if !empty(l:template_result.grammar)
+            let l:request['grammar'] = l:template_result.grammar
+        endif
+
+        let l:endpoint = g:llama_config.endpoint_base . '/completion'
+        if exists("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
+            let l:request['model'] = g:llama_config.model_fim
+        elseif exists("g:llama_config.model_inst") && len(g:llama_config.model_inst) > 0
+            let l:request['model'] = g:llama_config.model_inst
+        endif
+
+        " Store force_start for response extraction
+        let s:template_force_start = l:template_result.force_start
+    else
+        let l:request = {
+            \ 'id_slot':          0,
+            \ 'input_prefix':     l:prefix,
+            \ 'input_suffix':     l:suffix,
+            \ 'input_extra':      l:extra,
+            \ 'prompt':           l:middle,
+            \ 'n_predict':        g:llama_config.n_predict,
+            \ 'stop':             g:llama_config.stop_strings_fim,
+            \ 'n_cmpl':           g:llama_config.n_cmpl,
+            \ 'n_indent':         l:indent,
+            \ 'top_k':            40,
+            \ 'top_p':            0.90,
+            \ 'samplers':         ["top_k", "top_p", "infill"],
+            \ 'stream':           v:false,
+            \ 'cache_prompt':     v:true,
+            \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
+            \ 't_max_predict_ms': l:t_max_predict_ms,
+            \ 'response_fields':  [
+            \                       "content",
+            \                       "timings/prompt_n",
+            \                       "timings/prompt_ms",
+            \                       "timings/prompt_per_token_ms",
+            \                       "timings/prompt_per_second",
+            \                       "timings/predicted_n",
+            \                       "timings/predicted_ms",
+            \                       "timings/predicted_per_token_ms",
+            \                       "timings/predicted_per_second",
+            \                       "truncated",
+            \                       "tokens_cached",
+            \                     ],
+            \ }
+        let l:endpoint = g:llama_config.endpoint_fim
+        if exists("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
+            let l:request['model'] = g:llama_config.model_fim
+        endif
+    endif
 
     let l:curl_command = [
         \ "curl",
         \ "--silent",
         \ "--no-buffer",
         \ "--request", "POST",
-        \ "--url", g:llama_config.endpoint_fim,
+        \ "--url", l:endpoint,
         \ "--header", "Content-Type: application/json",
         \ "--data", "@-",
         \ ]
-
-    if exists ("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
-        let l:request['model'] = g:llama_config.model_fim
-    end
 
     if exists ("g:llama_config.api_key") && len(g:llama_config.api_key) > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
@@ -1027,6 +1310,12 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         elseif s:ghost_text_vim
             call job_stop(s:current_job_fim)
         endif
+    endif
+
+    " log the request for debugging
+    call llama#debug_log('fim_send | endpoint=' . l:endpoint . ' mode=' . g:llama_config.fim_mode . ' model=' . get(l:request, 'model', '(none)') . ' prefix=' . len(l:prefix) . ' suffix=' . len(l:suffix) . ' middle=' . len(l:middle))
+    if g:llama_config.fim_mode ==# 'template'
+        call llama#debug_log('fim_send | template request', json_encode(l:request))
     endif
 
     " send the request asynchronously
@@ -1098,6 +1387,11 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
         let l:responses = [l:decoded]
     else
         let l:responses = l:decoded
+    endif
+
+    " normalize template-completion responses to infill-compatible format
+    if g:llama_config.fim_mode ==# 'template'
+        let l:responses = map(l:responses, {_, r -> s:fim_template_extract(r, get(s:, 'template_force_start', ''))})
     endif
 
     " insert each response into the cache ring buffer
