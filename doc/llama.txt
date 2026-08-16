@@ -153,11 +153,11 @@ Currently the default config is:
 
 - {fim_mode}			FIM completion mode:
 					'infill' (default) - use the native /infill endpoint,
-					'template' - emulate FIM via /apply-template + /completion
+					'completion' - emulate FIM via /apply-template + /completion
 					(useful for models without a FIM template)
 
 - {endpoint_base}		base URL of the llama.cpp server, used by fim_mode
-					'template' for the /apply-template and /completion endpoints
+					'completion' for the /apply-template and /completion endpoints
 
 - {api_key}				llama.cpp server api key (optional)
 
