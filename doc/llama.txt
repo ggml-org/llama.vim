@@ -177,10 +177,10 @@ Currently the default config is:
 - {stop_strings_inst}	return the result immediately as soon as any of these
 						strings are encountered in the generated text for instruction completions
 
-- {t_max_prompt_ms}		max alloted time for the prompt processing
+- {t_max_prompt_ms}		max allowed time for the prompt processing
 						(TODO: not yet supported)
 
-- {t_max_predict_ms}	max alloted time for the prediction
+- {t_max_predict_ms}	max allowed time for the prediction
 
 - {show_info}			show extra info about the inference
 						(0 - disabled, 1 - statusline, 2 - inline)
