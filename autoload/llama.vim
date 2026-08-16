@@ -739,6 +739,7 @@ endfunction
 function! s:ring_warmup()
     let l:extra = s:ring_get_extra()
 
+    " no samplers needed here
     let l:request = {
         \ 'id_slot':          0,
         \ 'input_prefix':     "",
@@ -767,7 +768,7 @@ function! s:ring_warmup()
 
     if exists ("g:llama_config.model_fim") && len(g:llama_config.model_fim) > 0
         let l:request['model'] = g:llama_config.model_fim
-    endif
+    end
 
     if exists ("g:llama_config.api_key") && len(g:llama_config.api_key) > 0
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
