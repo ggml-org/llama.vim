@@ -26,8 +26,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   stop_strings_fim  return the result immediately as soon as any of these strings are encountered in the generated text for FIM completions
 "   stop_strings_inst return the result immediately as soon as any of these strings are encountered in the generated text for instruction completions
 "   n_cmpl:           number of completions to cache per position (ring buffer, default: 1)
-"   t_max_prompt_ms:  max alloted time for the prompt processing (TODO: not yet supported)
-"   t_max_predict_ms: max alloted time for the prediction
+"   t_max_prompt_ms:  max allowed time for the prompt processing (TODO: not yet supported)
+"   t_max_predict_ms: max allowed time for the prediction
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
 "   info_compact:     info message length (0 - full, 1 - short ms and t/s, 2 - remove t/s, 3 - also remove e:, q:, C:, 4 - only c: and r:)
 "   auto_fim:         trigger FIM completion automatically on cursor movement
