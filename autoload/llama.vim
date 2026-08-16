@@ -913,10 +913,14 @@ function! s:fim_completion_build(prefix, suffix, middle, extra)
     let l:suffix_stripped = substitute(a:suffix, '\s', '', 'g')
     for l:chunk in a:extra
         let l:chunk_stripped = substitute(l:chunk.text, '\s', '', 'g')
-        if stridx(l:prefix_stripped, l:chunk_stripped) >= 0
-                \ || stridx(l:chunk_stripped, l:prefix_stripped) >= 0
-                \ || stridx(l:suffix_stripped, l:chunk_stripped) >= 0
-                \ || stridx(l:chunk_stripped, l:suffix_stripped) >= 0
+        " An empty prefix/suffix would match every chunk (stridx(x, '') == 0), so only test non-empty sides.
+        let l:prefix_hit = !empty(l:prefix_stripped)
+                    \ && (stridx(l:prefix_stripped, l:chunk_stripped) >= 0
+                    \     || stridx(l:chunk_stripped, l:prefix_stripped) >= 0)
+        let l:suffix_hit = !empty(l:suffix_stripped)
+                    \ && (stridx(l:suffix_stripped, l:chunk_stripped) >= 0
+                    \     || stridx(l:chunk_stripped, l:suffix_stripped) >= 0)
+        if l:prefix_hit || l:suffix_hit
             call llama#debug_log('fim_completion_build | skipped overlapping chunk (first 80 chars)', strcharpart(l:chunk.text, 0, 80))
             continue
         endif
