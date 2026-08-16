@@ -632,7 +632,7 @@ function! s:pick_chunk(text, no_mod, do_evict)
         let l:l0 = s:rand(0, max([0, len(a:text) - g:llama_config.ring_chunk_size/2]))
         let l:l1 = min([l:l0 + g:llama_config.ring_chunk_size/2, len(a:text)])
 
-        let l:chunk = l:text[l:l0:l:l1]
+        let l:chunk = a:text[l:l0:l:l1]
     endif
 
     let l:chunk_str = join(l:chunk, "\n") . "\n"
