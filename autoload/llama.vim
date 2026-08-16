@@ -904,7 +904,7 @@ function! s:fim_completion_build(prefix, suffix, middle, extra)
 
     " Build the user message content: stable parts only (no fakeOutput/forceStart)
     " All sections are numbered context blocks, closed by a single ===END CONTEXT===
-    let l:user = 'Here is the code context for reference. Do not repeat any of it verbatim.' . "\n"
+    let l:user = 'Here is the context for reference. Do not repeat any of it verbatim.' . "\n"
     let l:n = 1
 
     " Filter out chunks that overlap with current prefix/suffix
@@ -955,7 +955,7 @@ function! s:fim_completion_build(prefix, suffix, middle, extra)
 
     " Build messages with placeholder for assistant response
     let l:messages = [
-        \ {'role': 'system', 'content': 'You are an expert code completion assistant. The user message contains numbered context blocks (background code from the same or related files) followed by a prefix section. Continue the code naturally from ===CONTINUE FROM HERE===. The context blocks are for reference only — do not repeat or reproduce any of them verbatim in your response. Do not include any markers in your response.'},
+        \ {'role': 'system', 'content': 'You are an expert completion assistant. The user message contains numbered context blocks (background from the same or related files) followed by a prefix section. Continue the text naturally from ===CONTINUE FROM HERE===. The context blocks are for reference only — do not repeat or reproduce any of them verbatim in your response. Do not include any markers in your response.'},
         \ {'role': 'user', 'content': l:user},
         \ {'role': 'assistant', 'content': s:completion_placeholder}
         \ ]
