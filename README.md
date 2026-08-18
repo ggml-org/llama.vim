@@ -128,6 +128,12 @@ actual selected profile. For example, using something like:
     \ 'model_fim':              'fim_model',
     \ 'model_inst':             'inst_model',
 ```
+And then in the server configuration, something like the following can be used:
+```console
+[qwen3.8-27B]
+alias                = inst_model,pi
+```
+And likewise for the fim_model.
 
 Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
 for the full list of options.
