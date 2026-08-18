@@ -1467,14 +1467,18 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
     endif
 
     " setup accept shortcuts
+    " note: use CTRL-\ CTRL-O - plain CTRL-O is a completion key (i_CTRL-X_CTRL-O), so it is
+    "       swallowed while insert-mode completion is active and the rest of the mapping
+    "       ends up being inserted as text
+    " ref: https://github.com/ggml-org/llama.vim/issues/38
     if g:llama_config.keymap_fim_accept_full != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-\><C-O>:call llama#fim_accept(''full'')<CR>'
     endif
     if g:llama_config.keymap_fim_accept_line != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-\><C-O>:call llama#fim_accept(''line'')<CR>'
     endif
     if g:llama_config.keymap_fim_accept_word != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-\><C-O>:call llama#fim_accept(''word'')<CR>'
     endif
 
     " setup cycle shortcuts (always, to prevent <C-J>/<C-K> from moving the cursor)
