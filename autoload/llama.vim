@@ -54,13 +54,13 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 " keymaps parameters (empty string to disable):
 "
-"   keymap_fim_trigger:     keymap to trigger the completion, default: <C-F>
+"   keymap_fim_trigger:     keymap to trigger the completion, default: <leader>llf
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
-"   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_fim_accept_word: keymap to accept word suggestion, default: <leader>ll]
 "   keymap_fim_next:        keymap to cycle to next completion,  default: <C-J>
 "   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-K>
-"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
+"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: <leader>lld
 "   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
 "   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
 "   keymap_inst_continue:   keymap to continue the instruction, default: <leader>llc

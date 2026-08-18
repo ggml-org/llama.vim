@@ -1,2 +1,9 @@
+:LlamaDebugClear	llama.txt	/*:LlamaDebugClear*
+:LlamaDebugToggle	llama.txt	/*:LlamaDebugToggle*
+:LlamaDisable	llama.txt	/*:LlamaDisable*
+:LlamaEnable	llama.txt	/*:LlamaEnable*
+:LlamaInstruct	llama.txt	/*:LlamaInstruct*
+:LlamaToggle	llama.txt	/*:LlamaToggle*
+:LlamaToggleAutoFim	llama.txt	/*:LlamaToggleAutoFim*
 llama	llama.txt	/*llama*
 llama_config	llama.txt	/*llama_config*
