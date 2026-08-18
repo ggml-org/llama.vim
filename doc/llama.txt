@@ -16,13 +16,21 @@ Requires:
 ================================================================================
 Default Shortcut
 
+insert mode:
+
 - Tab         - accept the current suggestion
 - Shift+Tab   - accept just the first line of the suggestion
 - <leader>ll] - accept just the first word of the suggestion
 - <C-J>       - cycle to next completion (when multiple are available)
 - <C-K>       - cycle to previous completion (when multiple are available)
 - <leader>llf - trigger FIM completion manually
+
+visual mode:
+
 - <leader>lli - trigger instruction-based editing (instruct mode)
+
+normal mode:
+
 - <leader>llr - rerun the instruction
 - <leader>llc - continue the instruction
 - Tab         - accept the instruction
