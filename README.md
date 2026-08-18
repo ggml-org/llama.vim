@@ -106,6 +106,29 @@ Examples:
     let g:llama_config.keymap_inst_cancel   = "<Esc>"
     ```
 
+6. Configure named llama.cpp servers:
+
+    ```vim
+    let g:llama_config.server_profiles = {
+        \ 'spark':   'http://192.168.0.66:8080',
+        \ 'gmktec':  'http://192.168.0.65:8080',
+        \ }
+    let g:llama_config.server_profile = 'spark'
+    ```
+
+Use `:LlamaServer` to show the available profiles and `:LlamaServer spark`
+to switch both FIM and instruction requests to another server. Profile names
+support command-line completion.
+
+This only allows the host servers to be specified, not the models used which are
+configured using `model_fim` and `model_inst`. But using consistent naming
+accross servers, or using server aliases, one can make this independant of the
+actual selected profile. For example, using something like:
+```console
+    \ 'model_fim':              'fim_model',
+    \ 'model_inst':             'inst_model',
+```
+
 Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
 for the full list of options.
 

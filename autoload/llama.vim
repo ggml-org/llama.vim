@@ -17,6 +17,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint_fim:     llama.cpp server endpoint for FIM completion
 "   endpoint_inst:    llama.cpp server endpoint for instruction completion
+"   server_profiles:  named llama.cpp server base URLs
+"   server_profile:   server profile selected at startup (empty to use the endpoints above)
 "   model_fim:        model name in case when multiple models are loaded (optional, recommended: Qwen3 Coder 30B)
 "   model_inst:       instruction model name (optional, recommended: gpt-oss-120b)
 "   api_key:          llama.cpp server api key (optional)
@@ -70,6 +72,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 let s:default_config = {
     \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
     \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
+    \ 'server_profiles':        {},
+    \ 'server_profile':         '',
     \ 'model_fim':              '',
     \ 'model_inst':             '',
     \ 'api_key':                '',
@@ -143,6 +147,81 @@ let s:llama_enabled = v:false
 " ref: https://github.com/ggml-org/llama.vim/pull/18
 let g:cache_data = {}
 let g:cache_lru_order = []
+
+function! s:server_profile_names()
+    if type(g:llama_config.server_profiles) != v:t_dict
+        return []
+    endif
+
+    return sort(keys(g:llama_config.server_profiles))
+endfunction
+
+function! llama#server_profile_complete(arglead, cmdline, cursorpos)
+    return filter(s:server_profile_names(), 'stridx(v:val, a:arglead) == 0')
+endfunction
+
+function! llama#server_profile(name, ...)
+    if empty(a:name)
+        let l:names = s:server_profile_names()
+        let l:active = empty(g:llama_config.server_profile)
+            \ ? '(custom endpoints)'
+            \ : g:llama_config.server_profile
+        echo 'Active llama server: ' . l:active
+        echo 'Available llama servers: ' . (empty(l:names) ? '(none)' : join(l:names, ', '))
+        return
+    endif
+
+    if type(g:llama_config.server_profiles) != v:t_dict
+        echohl ErrorMsg
+        echo 'llama.vim: server_profiles must be a dictionary'
+        echohl None
+        return
+    endif
+
+    if !has_key(g:llama_config.server_profiles, a:name)
+        echohl ErrorMsg
+        echo 'llama.vim: unknown server profile: ' . a:name
+        echohl None
+        return
+    endif
+
+    let l:base = g:llama_config.server_profiles[a:name]
+    if type(l:base) != v:t_string || empty(l:base)
+        echohl ErrorMsg
+        echo 'llama.vim: server profile must contain a non-empty base URL: ' . a:name
+        echohl None
+        return
+    endif
+
+    let l:base = substitute(l:base, '/\+$', '', '')
+    let g:llama_config.endpoint_fim = l:base . '/infill'
+    let g:llama_config.endpoint_inst = l:base . '/v1/chat/completions'
+    let g:llama_config.server_profile = a:name
+
+    " Cached and in-flight results belong to the previous endpoint.
+    let g:cache_data = {}
+    let g:cache_lru_order = []
+    if exists('s:current_job_fim') && s:current_job_fim != v:null
+        if s:ghost_text_nvim
+            call jobstop(s:current_job_fim)
+        elseif s:ghost_text_vim
+            call job_stop(s:current_job_fim)
+        endif
+        let s:current_job_fim = v:null
+    endif
+    if exists('s:inst_reqs')
+        for l:id in keys(copy(s:inst_reqs))
+            call s:inst_remove(str2nr(l:id))
+        endfor
+    endif
+    if exists('s:fim_hint_shown')
+        call llama#fim_hide()
+    endif
+
+    if !get(a:, 1, v:false)
+        echo 'Using llama server: ' . a:name . ' (' . l:base . ')'
+    endif
+endfunction
 
 " insert a single completion response into the cache ring buffer for a key
 " the ring buffer holds up to g:llama_config.n_cmpl entries per key
@@ -427,6 +506,7 @@ function! llama#setup()
     command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
     command! LlamaStatus         call llama#status()
+    command! -nargs=? -complete=customlist,llama#server_profile_complete LlamaServer call llama#server_profile(<q-args>)
 
     command! -range=% LlamaInstruct call llama#inst(<line1>, <line2>)
 
@@ -492,6 +572,10 @@ function! llama#init()
         if empty(prop_type_get(s:hlgroup_inst_info))
             call prop_type_add(s:hlgroup_inst_info, {'highlight': s:hlgroup_inst_info})
         endif
+    endif
+
+    if !empty(g:llama_config.server_profile)
+        call llama#server_profile(g:llama_config.server_profile, v:true)
     endif
 
     if g:llama_config.enable_at_startup
