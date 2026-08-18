@@ -60,16 +60,16 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
 "   keymap_fim_next:        keymap to cycle to next completion,  default: <C-J>
 "   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-K>
-"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
 "   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
 "   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
 "   keymap_inst_continue:   keymap to continue the instruction, default: <leader>llc
 "   keymap_inst_accept:     keymap to accept the instruction, default: <Tab>
 "   keymap_inst_cancel:     keymap to cancel the instruction, default: <Esc>
+"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
 "
 let s:default_config = {
-    \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
-    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
+    \ 'endpoint_fim':           'http://127.0.0.1:8080/infill',
+    \ 'endpoint_inst':          'http://127.0.0.1:8080/v1/chat/completions',
     \ 'model_fim':              '',
     \ 'model_inst':             '',
     \ 'api_key':                '',
@@ -90,10 +90,10 @@ let s:default_config = {
     \ 'ring_chunk_size':        64,
     \ 'ring_scope':             1024,
     \ 'ring_update_ms':         1000,
-    \ 'keymap_fim_trigger':     "<leader>llf",
+    \ 'keymap_fim_trigger':     "<C-F>",
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
-    \ 'keymap_fim_accept_word': "<leader>ll]",
+    \ 'keymap_fim_accept_word': "<C-B>",
     \ 'keymap_fim_next':        "<C-J>",
     \ 'keymap_fim_prev':        "<C-K>",
     \ 'keymap_inst_trigger':    "<leader>lli",
