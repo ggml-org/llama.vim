@@ -62,6 +62,12 @@ Commands
 <
 		Profile names support command-line completion.
 
+
+*:LlamaServerReset*
+		Discard the saved server-profile selection and restore the profile (or
+		custom endpoints) configured when llama.vim was loaded, normally in
+		your .vimrc.
+
 *:LlamaInstruct*
 		Trigger instruction-based editing (instruct mode) on selected text
 
@@ -162,10 +168,12 @@ Currently the default config is:
 - {endpoint_inst}		llama.cpp server endpoint for instruction completion
 
 - {server_profiles}		dictionary of named llama.cpp server base URLs. Selecting
-					a profile sets both endpoint_fim and endpoint_inst.
+						a profile sets both endpoint_fim and endpoint_inst.
 
 - {server_profile}		server profile selected at startup. Leave empty to use
-					endpoint_fim and endpoint_inst directly.
+						endpoint_fim and endpoint_inst directly.
+						A profile selected with |:LlamaServer| is saved between
+						sessions and takes precedence until |:LlamaServerReset|.
 
 - {api_key}				llama.cpp server api key (optional)
 

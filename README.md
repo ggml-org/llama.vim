@@ -118,7 +118,9 @@ Examples:
 
 Use `:LlamaServer` to show the available profiles and `:LlamaServer spark`
 to switch both FIM and instruction requests to another server. Profile names
-support command-line completion.
+support command-line completion. The selected profile is persisted and
+`:LlamaServerReset` can be used to restore the profile (or custom endpoints)
+configured in `.vimrc`.
 
 This only allows the host servers to be specified, not the models used which are
 configured using `model_fim` and `model_inst`. But using consistent naming

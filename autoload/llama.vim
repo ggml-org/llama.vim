@@ -139,6 +139,12 @@ endfor
 
 let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 
+" Keep the configured values separate from a profile restored from the previous
+" session.  :LlamaServerReset uses these values to return to the .vimrc setup.
+let s:default_server_profile = g:llama_config.server_profile
+let s:default_endpoint_fim   = g:llama_config.endpoint_fim
+let s:default_endpoint_inst  = g:llama_config.endpoint_inst
+
 let s:llama_enabled = v:false
 
 " containes cached responses from the server
@@ -158,6 +164,81 @@ endfunction
 
 function! llama#server_profile_complete(arglead, cmdline, cursorpos)
     return filter(s:server_profile_names(), 'stridx(v:val, a:arglead) == 0')
+endfunction
+
+function! s:server_profile_state_file()
+    " Allow configuration (.vimrc) of where the state file is stored.
+    let l:file = get(g:, 'llama_server_profile_state_file', '')
+    if type(l:file) == v:t_string && !empty(l:file)
+        return expand(l:file)
+    endif
+
+    " If Vim/Noevim has a stdpath defined the we use the state filesystem
+    " location.
+    if exists('*stdpath')
+        try
+            return stdpath('state') . '/llama/server_profile'
+        catch
+        endtry
+    endif
+
+    " Fallback to the user's home .vim directory.
+    return expand('~/.vim/llama-server-profile')
+endfunction
+
+function! s:save_server_profile(profile)
+    let l:file = s:server_profile_state_file()
+    try
+        call mkdir(fnamemodify(l:file, ':h'), 'p', 0700)
+        call writefile([a:profile], l:file)
+    catch
+        echohl WarningMsg
+        echomsg 'llama.vim: could not save server profile state'
+        echohl None
+    endtry
+endfunction
+
+function! s:restore_server_profile()
+    let l:file = s:server_profile_state_file()
+    if !filereadable(l:file)
+        return
+    endif
+
+    try
+        let l:profile = get(readfile(l:file), 0, '')
+    catch
+        return
+    endtry
+
+    if type(g:llama_config.server_profiles) == v:t_dict && has_key(g:llama_config.server_profiles, l:profile)
+        let g:llama_config.server_profile = l:profile
+    endif
+endfunction
+
+function! llama#server_profile_reset()
+    let g:llama_config.endpoint_fim   = s:default_endpoint_fim
+    let g:llama_config.endpoint_inst  = s:default_endpoint_inst
+    let g:llama_config.server_profile = s:default_server_profile
+
+    if !empty(s:default_server_profile)
+        call llama#server_profile(s:default_server_profile, v:true, v:false)
+    endif
+
+    let l:file = s:server_profile_state_file()
+    if filereadable(l:file)
+        try
+            call delete(l:file)
+        catch
+            echohl WarningMsg
+            echomsg 'llama.vim: could not clear server profile state'
+            echohl None
+            return
+        endtry
+    endif
+
+    echo 'Restored default llama server: ' . (empty(s:default_server_profile)
+        \ ? '(custom endpoints)'
+        \ : s:default_server_profile)
 endfunction
 
 function! llama#server_profile(name, ...)
@@ -220,6 +301,10 @@ function! llama#server_profile(name, ...)
 
     if !get(a:, 1, v:false)
         echo 'Using llama server: ' . a:name . ' (' . l:base . ')'
+    endif
+
+    if get(a:, 2, !get(a:, 1, v:false))
+        call s:save_server_profile(a:name)
     endif
 endfunction
 
@@ -507,6 +592,7 @@ function! llama#setup()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
     command! LlamaStatus         call llama#status()
     command! -nargs=? -complete=customlist,llama#server_profile_complete LlamaServer call llama#server_profile(<q-args>)
+    command! LlamaServerReset call llama#server_profile_reset()
 
     command! -range=% LlamaInstruct call llama#inst(<line1>, <line2>)
 
@@ -574,8 +660,9 @@ function! llama#init()
         endif
     endif
 
+    call s:restore_server_profile()
     if !empty(g:llama_config.server_profile)
-        call llama#server_profile(g:llama_config.server_profile, v:true)
+        call llama#server_profile(g:llama_config.server_profile, v:true, v:false)
     endif
 
     if g:llama_config.enable_at_startup
