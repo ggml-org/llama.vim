@@ -17,8 +17,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint_fim:     llama.cpp server endpoint for FIM completion
 "   endpoint_inst:    llama.cpp server endpoint for instruction completion
-"   server_profiles:  named llama.cpp server base URLs
-"   server_profile:   server profile selected at startup (empty to use the endpoints above)
+"   profiles:         named llama.cpp profiles
+"   profile:          profile selected at startup (empty to use the endpoints above)
 "   model_fim:        model name in case when multiple models are loaded (optional, recommended: Qwen3 Coder 30B)
 "   model_inst:       instruction model name (optional, recommended: gpt-oss-120b)
 "   api_key:          llama.cpp server api key (optional)
@@ -72,8 +72,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 let s:default_config = {
     \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
     \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
-    \ 'server_profiles':        {},
-    \ 'server_profile':         '',
+    \ 'profiles':               {},
+    \ 'profile':                '',
     \ 'model_fim':              '',
     \ 'model_inst':             '',
     \ 'api_key':                '',
@@ -140,8 +140,8 @@ endfor
 let g:llama_config = extendnew(s:default_config, llama_config, 'force')
 
 " Keep the configured values separate from a profile restored from the previous
-" session.  :LlamaServerReset uses these values to return to the .vimrc setup.
-let s:default_server_profile = g:llama_config.server_profile
+" session.  :LlamaProfileReset uses these values to return to the .vimrc setup.
+let s:default_profile = g:llama_config.profile
 let s:default_endpoint_fim   = g:llama_config.endpoint_fim
 let s:default_endpoint_inst  = g:llama_config.endpoint_inst
 
@@ -154,52 +154,53 @@ let s:llama_enabled = v:false
 let g:cache_data = {}
 let g:cache_lru_order = []
 
-function! s:server_profile_names()
-    if type(g:llama_config.server_profiles) != v:t_dict
+function! s:profile_names()
+    if type(g:llama_config.profiles) != v:t_dict
         return []
     endif
 
-    return sort(keys(g:llama_config.server_profiles))
+    return sort(keys(g:llama_config.profiles))
 endfunction
 
-function! llama#server_profile_complete(arglead, cmdline, cursorpos)
-    return filter(s:server_profile_names(), 'stridx(v:val, a:arglead) == 0')
+function! llama#profile_complete(arglead, cmdline, cursorpos)
+    return filter(s:profile_names(), 'stridx(v:val, a:arglead) == 0')
 endfunction
 
-function! s:server_profile_state_file()
+function! s:profile_state_file()
     " Allow configuration (.vimrc) of where the state file is stored.
-    let l:file = get(g:, 'llama_server_profile_state_file', '')
+    let l:file = get(g:, 'llama_profile_state_file', '')
     if type(l:file) == v:t_string && !empty(l:file)
         return expand(l:file)
     endif
 
-    " If Vim/Noevim has a stdpath defined the we use the state filesystem
+    " If Vim/Neovim provides stdpath(), use its state filesystem
     " location.
     if exists('*stdpath')
         try
-            return stdpath('state') . '/llama/server_profile'
+            return stdpath('state') . '/llama/profile'
         catch
         endtry
     endif
 
     " Fallback to the user's home .vim directory.
-    return expand('~/.vim/llama-server-profile')
+    return expand('~/.vim/llama-profile')
 endfunction
 
-function! s:save_server_profile(profile)
-    let l:file = s:server_profile_state_file()
+
+function! s:save_profile(profile)
+    let l:file = s:profile_state_file()
     try
         call mkdir(fnamemodify(l:file, ':h'), 'p', 0700)
         call writefile([a:profile], l:file)
     catch
         echohl WarningMsg
-        echomsg 'llama.vim: could not save server profile state'
+        echomsg 'llama.vim: could not save profile state'
         echohl None
     endtry
 endfunction
 
-function! s:restore_server_profile()
-    let l:file = s:server_profile_state_file()
+function! s:restore_profile()
+    let l:file = s:profile_state_file()
     if !filereadable(l:file)
         return
     endif
@@ -210,66 +211,66 @@ function! s:restore_server_profile()
         return
     endtry
 
-    if type(g:llama_config.server_profiles) == v:t_dict && has_key(g:llama_config.server_profiles, l:profile)
-        let g:llama_config.server_profile = l:profile
+    if type(g:llama_config.profiles) == v:t_dict && has_key(g:llama_config.profiles, l:profile)
+        let g:llama_config.profile = l:profile
     endif
 endfunction
 
-function! llama#server_profile_reset()
+function! llama#profile_reset()
     let g:llama_config.endpoint_fim   = s:default_endpoint_fim
     let g:llama_config.endpoint_inst  = s:default_endpoint_inst
-    let g:llama_config.server_profile = s:default_server_profile
+    let g:llama_config.profile = s:default_profile
 
-    if !empty(s:default_server_profile)
-        call llama#server_profile(s:default_server_profile, v:true, v:false)
+    if !empty(s:default_profile)
+        call llama#profile(s:default_profile, v:true, v:false)
     endif
 
-    let l:file = s:server_profile_state_file()
+    let l:file = s:profile_state_file()
     if filereadable(l:file)
         try
             call delete(l:file)
         catch
             echohl WarningMsg
-            echomsg 'llama.vim: could not clear server profile state'
+            echomsg 'llama.vim: could not clear profile state'
             echohl None
             return
         endtry
     endif
 
-    echo 'Restored default llama server: ' . (empty(s:default_server_profile)
+    echo 'Restored default llama profile: ' . (empty(s:default_profile)
         \ ? '(custom endpoints)'
-        \ : s:default_server_profile)
+        \ : s:default_profile)
 endfunction
 
-function! llama#server_profile(name, ...)
+function! llama#profile(name, ...)
     if empty(a:name)
-        let l:names = s:server_profile_names()
-        let l:active = empty(g:llama_config.server_profile)
+        let l:names = s:profile_names()
+        let l:active = empty(g:llama_config.profile)
             \ ? '(custom endpoints)'
-            \ : g:llama_config.server_profile
-        echo 'Active llama server: ' . l:active
-        echo 'Available llama servers: ' . (empty(l:names) ? '(none)' : join(l:names, ', '))
+            \ : g:llama_config.profile
+        echo 'Active llama profile: ' . l:active
+        echo 'Available llama profiles: ' . (empty(l:names) ? '(none)' : join(l:names, ', '))
         return
     endif
 
-    if type(g:llama_config.server_profiles) != v:t_dict
+    if type(g:llama_config.profiles) != v:t_dict
         echohl ErrorMsg
-        echo 'llama.vim: server_profiles must be a dictionary'
+        echo 'llama.vim: profiles must be a dictionary'
         echohl None
         return
     endif
 
-    if !has_key(g:llama_config.server_profiles, a:name)
+    if !has_key(g:llama_config.profiles, a:name)
         echohl ErrorMsg
-        echo 'llama.vim: unknown server profile: ' . a:name
+        echo 'llama.vim: unknown profile: ' . a:name
         echohl None
         return
     endif
 
-    let l:base = g:llama_config.server_profiles[a:name]
+    let l:base = g:llama_config.profiles[a:name]
     if type(l:base) != v:t_string || empty(l:base)
         echohl ErrorMsg
-        echo 'llama.vim: server profile must contain a non-empty base URL: ' . a:name
+        echo 'llama.vim: profile must contain a non-empty base URL: ' . a:name
         echohl None
         return
     endif
@@ -277,7 +278,7 @@ function! llama#server_profile(name, ...)
     let l:base = substitute(l:base, '/\+$', '', '')
     let g:llama_config.endpoint_fim = l:base . '/infill'
     let g:llama_config.endpoint_inst = l:base . '/v1/chat/completions'
-    let g:llama_config.server_profile = a:name
+    let g:llama_config.profile = a:name
 
     " Cached and in-flight results belong to the previous endpoint.
     let g:cache_data = {}
@@ -300,11 +301,11 @@ function! llama#server_profile(name, ...)
     endif
 
     if !get(a:, 1, v:false)
-        echo 'Using llama server: ' . a:name . ' (' . l:base . ')'
+        echo 'Using llama profile: ' . a:name . ' (' . l:base . ')'
     endif
 
     if get(a:, 2, !get(a:, 1, v:false))
-        call s:save_server_profile(a:name)
+        call s:save_profile(a:name)
     endif
 endfunction
 
@@ -591,8 +592,8 @@ function! llama#setup()
     command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
     command! LlamaStatus         call llama#status()
-    command! -nargs=? -complete=customlist,llama#server_profile_complete LlamaServer call llama#server_profile(<q-args>)
-    command! LlamaServerReset call llama#server_profile_reset()
+    command! -nargs=? -complete=customlist,llama#profile_complete LlamaProfile call llama#profile(<q-args>)
+    command! LlamaProfileReset call llama#profile_reset()
 
     command! -range=% LlamaInstruct call llama#inst(<line1>, <line2>)
 
@@ -660,9 +661,9 @@ function! llama#init()
         endif
     endif
 
-    call s:restore_server_profile()
-    if !empty(g:llama_config.server_profile)
-        call llama#server_profile(g:llama_config.server_profile, v:true, v:false)
+    call s:restore_profile()
+    if !empty(g:llama_config.profile)
+        call llama#profile(g:llama_config.profile, v:true, v:false)
     endif
 
     if g:llama_config.enable_at_startup

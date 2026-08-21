@@ -109,17 +109,17 @@ Examples:
 6. Configure named llama.cpp servers:
 
     ```vim
-    let g:llama_config.server_profiles = {
+    let g:llama_config.profiles = {
         \ 'spark':   'http://192.168.0.66:8080',
         \ 'gmktec':  'http://192.168.0.65:8080',
         \ }
-    let g:llama_config.server_profile = 'spark'
+    let g:llama_config.profile = 'spark'
     ```
 
-Use `:LlamaServer` to show the available profiles and `:LlamaServer spark`
+Use `:LlamaProfile` to show the available profiles and `:LlamaProfile spark`
 to switch both FIM and instruction requests to another server. Profile names
 support command-line completion. The selected profile is persisted and
-`:LlamaServerReset` can be used to restore the profile (or custom endpoints)
+`:LlamaProfileReset` can be used to restore the profile (or custom endpoints)
 configured in `.vimrc`.
 
 This only allows the host servers to be specified, not the models used which are

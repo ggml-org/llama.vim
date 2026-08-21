@@ -60,19 +60,19 @@ Commands
 		Toggle autofim for this vim/nvim session
 		Equivalent to vimscript function: `llama#toggle_auto_fim()`
 
-*:LlamaServer*
+*:LlamaProfile*
 
-		Show the active and available named server profiles. Pass a profile
+		Show the active and available named profiles. Pass a profile
 		name to switch both FIM and instruction endpoints:
 
 >
-		:LlamaServer spark
+		:LlamaProfile spark
 <
 		Profile names support command-line completion.
 
 
-*:LlamaServerReset*
-		Discard the saved server-profile selection and restore the profile (or
+*:LlamaProfileReset*
+		Discard the saved profile selection and restore the profile (or
 		custom endpoints) configured when llama.vim was loaded, normally in
 		your .vimrc.
 
@@ -133,8 +133,8 @@ Currently the default config is:
 		let s:default_config = {
 		    \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
 		    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
-		    \ 'server_profiles':        {},
-		    \ 'server_profile':         '',
+		    \ 'profiles':               {},
+		    \ 'profile':                '',
 		    \ 'model_fim':              '',
 		    \ 'model_inst':             '',
 		    \ 'api_key':                '',
@@ -175,13 +175,13 @@ Currently the default config is:
 
 - {endpoint_inst}		llama.cpp server endpoint for instruction completion
 
-- {server_profiles}		dictionary of named llama.cpp server base URLs. Selecting
+- {profiles}		    dictionary of named llama.cpp server base URLs. Selecting
 						a profile sets both endpoint_fim and endpoint_inst.
 
-- {server_profile}		server profile selected at startup. Leave empty to use
+- {profile}		        profile selected at startup. Leave empty to use
 						endpoint_fim and endpoint_inst directly.
-						A profile selected with |:LlamaServer| is saved between
-						sessions and takes precedence until |:LlamaServerReset|.
+						A profile selected with |:LlamaProfile| is saved between
+						sessions and takes precedence until |:LlamaProfileReset|.
 
 - {api_key}				llama.cpp server api key (optional)
 
@@ -321,17 +321,17 @@ Example:
 <
 5. Configure and switch between named llama.cpp servers:
 >vim
-		let g:llama_config.server_profiles = {
+		let g:llama_config.profiles = {
 		    \ 'spark':  'http://192.168.0.66:8080',
 		    \ 'gmktec': 'http://192.168.0.65:8080',
 		    \ }
-		let g:llama_config.server_profile = 'spark'
+		let g:llama_config.profile = 'spark'
 
 		" Show the active and available profiles.
-		:LlamaServer
+		:LlamaProfile
 
 		" Switch FIM and instruction requests to another server.
-		:LlamaServer workstation
+		:LlamaProfile gmktec
 <
 To adjust the colors for hint and info texts, `llama.vim` provides the
 highlight group `llama_hl_fim_hint` and `llama_hl_fim_info`. You can modify these
