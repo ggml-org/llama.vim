@@ -100,7 +100,7 @@ Examples:
 
     ```vim
     let g:llama_config.keymap_inst_trigger  = "<leader>lli"
-    let g:llama_config.keymap_inst_retry    = "<leader>llr"
+    let g:llama_config.keymap_inst_rerun    = "<leader>llr"
     let g:llama_config.keymap_inst_continue = "<leader>llc"
     let g:llama_config.keymap_inst_accept   = "<Tab>"
     let g:llama_config.keymap_inst_cancel   = "<Esc>"

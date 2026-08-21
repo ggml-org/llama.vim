@@ -56,13 +56,13 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 " keymaps parameters (empty string to disable):
 "
-"   keymap_fim_trigger:     keymap to trigger the completion, default: <C-F>
+"   keymap_fim_trigger:     keymap to trigger the completion, default: <leader>llf
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
-"   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_fim_accept_word: keymap to accept word suggestion, default: <leader>ll]
 "   keymap_fim_next:        keymap to cycle to next completion,  default: <C-J>
 "   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-K>
-"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
+"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: <leader>lld
 "   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
 "   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
 "   keymap_inst_continue:   keymap to continue the instruction, default: <leader>llc
@@ -1638,14 +1638,18 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
     endif
 
     " setup accept shortcuts
+    " note: use CTRL-\ CTRL-O - plain CTRL-O is a completion key (i_CTRL-X_CTRL-O), so it is
+    "       swallowed while insert-mode completion is active and the rest of the mapping
+    "       ends up being inserted as text
+    " ref: https://github.com/ggml-org/llama.vim/issues/38
     if g:llama_config.keymap_fim_accept_full != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-\><C-O>:call llama#fim_accept(''full'')<CR>'
     endif
     if g:llama_config.keymap_fim_accept_line != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-\><C-O>:call llama#fim_accept(''line'')<CR>'
     endif
     if g:llama_config.keymap_fim_accept_word != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-\><C-O>:call llama#fim_accept(''word'')<CR>'
     endif
 
     " setup cycle shortcuts (always, to prevent <C-J>/<C-K> from moving the cursor)
