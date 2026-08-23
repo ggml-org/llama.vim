@@ -149,6 +149,8 @@ Currently the default config is:
 		    \ 'keymap_inst_accept':     "<Tab>",
 		    \ 'keymap_inst_cancel':     "<Esc>",
 		    \ 'keymap_debug_toggle':    "<leader>lld",
+            \ 'fim_params':             {},
+            \ 'inst_params':            {},
 		    \ 'enable_at_startup':      v:true,
 		    \ }
 <
@@ -204,6 +206,12 @@ Currently the default config is:
 						of the cursor
 
 - {max_cache_keys}		max number of cached completions to keep in result_cache
+
+- {fim_params}		    request parameters for the FIM completion (optional, use
+                        default parameters if not provided)
+
+- {inst_params}		    request parameters for the instruction completion
+                        (optional, use default parameters if not provided)
 
 - {enable_at_startup}	whether to enable llama.vim functionality at startup
 						(v:true to enable, v:false to disable; default: v:true)

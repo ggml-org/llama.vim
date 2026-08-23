@@ -33,6 +33,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   auto_fim:         trigger FIM completion automatically on cursor movement
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
 "   max_cache_keys:   max number of cached completions to keep in result_cache
+"   fim_params:       request parameters for the FIM completion (optional, use default parameters if not provided)
+"   inst_params:      request parameters for the instruction completion (optional, use default parameters if not provided)
 "   enable_at_startup: enable llama.vim functionality at startup (default: v:true)
 "
 " ring buffer of chunks, accumulated with time upon:
@@ -102,6 +104,8 @@ let s:default_config = {
     \ 'keymap_inst_accept':     "<Tab>",
     \ 'keymap_inst_cancel':     "<Esc>",
     \ 'keymap_debug_toggle':    "<leader>lld",
+    \ 'fim_params':             {},
+    \ 'inst_params':            {},
     \ 'enable_at_startup':      v:true,
     \ }
 
@@ -1002,6 +1006,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \                       "tokens_cached",
         \                     ],
         \ }
+    call extend(l:request, g:llama_config.fim_params, 'force')
 
     let l:curl_command = [
         \ "curl",
@@ -1784,6 +1789,7 @@ function! llama#inst_send(req_id, messages)
         \ 'stream':       v:true,
         \ 'cache_prompt': v:true,
         \ }
+    call extend(l:request, g:llama_config.inst_params, 'force')
 
     let l:curl_command = [
         \ "curl",
