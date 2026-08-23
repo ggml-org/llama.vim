@@ -34,6 +34,9 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
 "   max_cache_keys:   max number of cached completions to keep in result_cache
 "   enable_at_startup: enable llama.vim functionality at startup (default: v:true)
+"   disabled_filetypes: list of filetypes to disable code completion (default: [])
+"   enable_filetypes:   list of filetypes to enable code completion (default: [])
+"                       overrides disabled filetypes, useful if used with disabled_filetypes = [""] 
 "
 " ring buffer of chunks, accumulated with time upon:
 "
@@ -51,6 +54,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "                           at ring_n_chunks = 64 and ring_chunk_size = 64 you need ~32k context
 "   ring_scope:       the range around the cursor position (in number of lines) for gathering chunks after FIM
 "   ring_update_ms:   how often to process queued chunks in normal mode
+"
 "
 " keymaps parameters (empty string to disable):
 "
@@ -103,6 +107,8 @@ let s:default_config = {
     \ 'keymap_inst_cancel':     "<Esc>",
     \ 'keymap_debug_toggle':    "<leader>lld",
     \ 'enable_at_startup':      v:true,
+    \ 'disabled_filetypes':     [],
+    \ 'enabled_filetypes':      [],
     \ }
 
 let llama_config = get(g:, 'llama_config', s:default_config)
@@ -223,10 +229,45 @@ function! s:rand(i0, i1) abort
     return a:i0 + rand() % (a:i1 - a:i0 + 1)
 endfunction
 
+" check if current filetype is in disabled_filetypes list and enable/disable accordingly
+function! s:check_filetype()
+    let l:current_ft = &filetype
+
+    " skip if not in a real buffer
+    if !buflisted(bufnr('%')) || !filereadable(expand('%'))
+        return
+    endif
+
+    call llama#debug_log('check_filetype for filetype: ' . l:current_ft)
+
+    let l:is_disabled = index(g:llama_config.disabled_filetypes, l:current_ft) >= 0 || index(g:llama_config.disabled_filetypes, '*') >= 0
+    let l:is_enabled = index(g:llama_config.enabled_filetypes, l:current_ft) >= 0 || index(g:llama_config.enabled_filetypes, '*') >= 0
+
+    if l:is_disabled && !l:is_enabled
+        " filetype is disabled, disabled plugin
+        if s:llama_enabled
+            call llama#disable()
+
+            " now that llama is disabled the autocmd group will not be called
+            " so we must re-add in the check_filetype autocmd 
+            "
+            " NOTE because of this, if the user disables the plugin manually, 
+            " This filetype check will not be performed until the user
+            " manually re-enables the plugin. 
+            call llama#setup_filetype_check_autocmds()
+        endif
+    else
+        if !s:llama_enabled
+            call llama#enable()
+        endif
+    endif
+endfunction
+
 function! llama#disable()
     call llama#fim_hide()
 
     autocmd! llama
+    silent! autocmd! llama_filetype_check
 
     " TODO: these unmaps don't seem to work properly
     if g:llama_config.keymap_fim_trigger != ''
@@ -526,7 +567,21 @@ function! llama#setup_autocmds()
     augroup END
 endfunction
 
+function! llama#setup_filetype_check_autocmds()
+    augroup llama
+        autocmd BufEnter * call s:check_filetype()
+    augroup END
+endfunction
+
 function! llama#enable()
+    " check if current filetype is in disabled_filetypes list
+    let l:current_ft = &filetype
+    if index(g:llama_config.disabled_filetypes, l:current_ft) >= 0 && index(g:llama_config.enabled_filetypes, l:current_ft) == -1
+        call llama#debug_log('plugin not enabled for filetype: ' . l:current_ft)
+        call llama#setup_filetype_check_autocmds()
+        return
+    endif
+
     if s:llama_enabled
         return
     endif
@@ -556,6 +611,7 @@ function! llama#enable()
     endif
 
     call llama#setup_autocmds()
+    call llama#setup_filetype_check_autocmds()
 
     silent! call llama#fim_hide()
 

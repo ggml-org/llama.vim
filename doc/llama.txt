@@ -208,6 +208,18 @@ Currently the default config is:
 - {enable_at_startup}	whether to enable llama.vim functionality at startup
 						(v:true to enable, v:false to disable; default: v:true)
 
+- {disabled_filetypes}	list of filetypes to disable code completion for
+                        (default: []). When the current filetype is in this
+                        list, code completion will not be triggered.
+                        NOTE if set to ['*'] all files will be blanket
+                        disabled, this is useful for using with
+                        enabled_filetypes.
+
+- {enabled_filetypes}	list of filetypes to enable code completion for
+                        (default: []). When the current filetype is in this
+                        list, code completion will be triggered. Enabled
+                        filetypes override any disabled matches.
+
 parameters for the ring-buffer with extra context:
 
 - {ring_n_chunks}		max number of chunks to pass as extra context to the
