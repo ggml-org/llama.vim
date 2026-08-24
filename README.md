@@ -1,8 +1,16 @@
 # llama.vim
 
+<div align="center">
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/ggml-org/llama.vim?filter=v*)](https://github.com/ggml-org/llama.vim/releases)
+[![Actions Status](https://github.com/ggml-org/whisper.cpp/workflows/CI/badge.svg)](https://github.com/ggml-org/llama.vim/actions)
+
 Local LLM-assisted text completion.
 
 <img width="485" alt="image" src="https://github.com/user-attachments/assets/a950e38c-3b3f-4c46-94fe-0d6e0f790fc6">
+
+</div>
 
 #### Fill-in-Middle (FIM) completions
 
