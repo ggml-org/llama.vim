@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama.vim - FIM Architecture</title>
+<style>
+:root{--bg:#0d1117;--sf:#161b22;--sf2:#1c2333;--bd:#30363d;--tx:#e6edf3;--td:#8b949e;--ac:#58a6ff;--a2:#f0883e;--gn:#3fb950;--rd:#f85149;--pu:#bc8cff;--yl:#d29922;--cy:#39d2c0;--mo:"SF Mono","Cascadia Code","Fira Code",monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.6;max-width:1100px;margin:0 auto;padding:2rem}
+h1{font-size:2.2rem;background:linear-gradient(135deg,var(--ac),var(--pu));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{color:var(--td);font-size:1.05rem;margin:0.25rem 0 2rem}
+h2{font-size:1.45rem;color:var(--ac);margin:2.5rem 0 1rem;padding-bottom:.5rem;border-bottom:1px solid var(--bd)}
+h3{font-size:1.1rem;color:var(--a2);margin:1.4rem 0 .5rem}
+p,li{color:var(--td);margin-bottom:.5rem}
+ul,ol{padding-left:1.5rem;margin-bottom:1rem}
+code{font-family:var(--mo);background:var(--sf2);padding:.15em .4em;border-radius:4px;font-size:.88em;color:var(--cy)}
+pre{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem;overflow-x:auto;margin:1rem 0;font-family:var(--mo);font-size:.82rem;line-height:1.5}
+pre .c{color:var(--td)}pre .k{color:var(--pu)}pre .s{color:var(--gn)}pre .f{color:var(--ac)}pre .n{color:var(--a2)}pre .t{color:var(--cy)}
+.ib{background:var(--sf);border:1px solid var(--bd);border-left:3px solid var(--ac);border-radius:0 8px 8px 0;padding:1rem 1.25rem;margin:1rem 0}
+.ib.w{border-left-color:var(--yl)}.ib.g{border-left-color:var(--gn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1rem 0}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem}
+.card h3{margin-top:0;font-size:1rem}
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.85rem}
+th{background:var(--sf2);color:var(--ac);text-align:left;padding:.6rem 1rem;border-bottom:2px solid var(--bd)}
+td{padding:.5rem 1rem;border-bottom:1px solid var(--bd);color:var(--td)}
+.tag{display:inline-block;font-family:var(--mo);font-size:.7rem;padding:.15em .5em;border-radius:12px;margin-right:.3rem}
+.tag.a{background:rgba(88,166,255,.15);color:var(--ac)}.tag.c{background:rgba(240,136,62,.15);color:var(--a2)}.tag.r{background:rgba(63,185,80,.15);color:var(--gn)}
+.divider{height:1px;background:var(--bd);margin:2.5rem 0}
+.toc{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:2rem}
+.toc h3{margin-top:0;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--td)}
+.toc ul{list-style:none;padding:0;columns:2;column-gap:2rem}
+.toc li{padding:.15rem 0;break-inside:avoid}
+.toc a{color:var(--ac);text-decoration:none;font-size:.88rem}
+.toc a:hover{text-decoration:underline}
+
+/* Flow */
+.fc{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:2rem;margin:1.5rem 0;overflow-x:auto}
+.fl{display:flex;flex-direction:column;align-items:center;gap:0;min-width:600px}
+.fn{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:.7rem 1.4rem;text-align:center;font-family:var(--mo);font-size:.82rem;max-width:400px;width:100%}
+.fn.tr{border-color:var(--yl);color:var(--yl)}.fn.ca{border-color:var(--ac);color:var(--ac)}.fn rq{border-color:var(--a2);color:var(--a2)}.fn.re{border-color:var(--gn);color:var(--gn)}.fn.sr{border-color:var(--pu);color:var(--pu)}
+.fa{width:3px;height:28px;background:var(--tx);position:relative;opacity:.35;border-radius:2px}
+.fa::after{content:"▼";position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);color:var(--tx);font-size:.9rem;opacity:.5}
+
+/* Speculative Pipeline */
+.fn.sp-hit{background:rgba(63,185,80,.15);border-color:var(--gn);color:var(--gn)}
+.fn.sp-call{background:rgba(240,136,62,.15);border-color:var(--a2);color:var(--a2)}
+.fn.sp-ctx{background:rgba(139,148,158,.1);border-color:var(--td);color:var(--tx)}
+.fn.sp-warm{background:rgba(188,140,255,.15);border-color:var(--pu);color:var(--pu)}
+.fn.sp-done{background:rgba(88,166,255,.15);border-color:var(--ac);color:var(--ac)}
+.fla.sp-bg{background:var(--sf2);border-color:var(--bd);color:var(--tx);font-size:.82rem;padding:.4rem 1rem;opacity:.9}
+.fb{display:flex;gap:2.5rem;align-items:flex-start;width:100%;justify-content:center}
+.fb>div{display:flex;flex-direction:column;align-items:center;gap:0}
+.fla{font-size:.73rem;color:var(--td);padding:.2rem .6rem;background:var(--sf);border-radius:12px;border:1px solid var(--bd);margin:.2rem 0}
+
+/* Hash viz */
+.hv{display:flex;align-items:stretch;gap:0;margin:1rem 0;border-radius:8px;overflow:hidden;border:1px solid var(--bd);font-family:var(--mo);font-size:.75rem}
+.hp{padding:.7rem 1rem;display:flex;align-items:center;justify-content:center;text-align:center;min-width:90px}
+.hp.px{background:rgba(88,166,255,.12);color:var(--ac)}.hp.mx{background:rgba(240,136,62,.12);color:var(--a2)}.hp.sx{background:rgba(63,185,80,.12);color:var(--gn)}.hp.se{background:rgba(188,140,255,.12);color:var(--pu);font-weight:700}.hp.rs{background:rgba(210,153,34,.12);color:var(--yl);flex:1}
+
+/* Ring */
+.rv{display:flex;align-items:center;gap:.4rem;margin:1rem 0;overflow-x:auto;padding:.5rem 0}
+.rs{width:55px;height:55px;border-radius:8px;border:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mo);font-size:.62rem;flex-shrink:0}
+.rs.q{background:rgba(88,166,255,.1);border-color:var(--ac);color:var(--ac)}.rs.a{background:rgba(63,185,80,.1);border-color:var(--gn);color:var(--gn)}.rs.e{background:var(--sf2);color:var(--td)}
+.rs span{margin-top:2px;opacity:.7;font-size:.58rem}
+
+/* Stats */
+.sb{font-family:var(--mo);font-size:.8rem;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:.7rem 1.2rem;margin:1rem 0;color:var(--td);overflow-x:auto;white-space:nowrap}
+.sb .sk{color:var(--a2)}.sb .sv{color:var(--gn)}.sb .st{display:inline-block;margin-right:1.5rem}
+
+/* Seq */
+.seq{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:1rem 0;font-family:var(--mo);font-size:.78rem}
+.ss{background:var(--sf2);border:1px solid var(--bd);border-radius:6px;padding:.35rem .75rem;white-space:nowrap}
+.sa{color:var(--td)}
+
+/* Fuzzy */
+.fz{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.2rem;margin:1rem 0;font-family:var(--mo);font-size:.78rem}
+.fz-p{display:flex;align-items:center;gap:.3rem;margin:.2rem 0;padding:.15rem 0}
+.fz-c{width:1em;height:1em;display:inline-flex;align-items:center;justify-content:center;border-radius:3px;font-size:.85em}
+.fz-c.t{background:rgba(88,166,255,.2);color:var(--ac)}.fz-c.m{background:rgba(63,185,80,.2);color:var(--gn)}.fz-c.g{background:rgba(240,136,62,.2);color:var(--a2)}.fz-c.d{background:var(--sf2);color:var(--td)}
+.fz-l{color:var(--td);font-size:.72rem;min-width:75px}
+
+/* Fuzzy Demo */
+.fz-demo{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.2rem;margin:1rem 0}
+.fz-demo-input{margin-bottom:1rem}
+.fz-demo-input label{display:block;color:var(--tx);font-size:.85rem;margin-bottom:.5rem}
+.fz-demo-input input{width:100%;padding:.75rem 1rem;background:var(--sf2);border:1px solid var(--bd);border-radius:6px;color:var(--tx);font-family:var(--mo);font-size:.9rem;outline:none}
+.fz-demo-input input:focus{border-color:var(--ac);box-shadow:0 0 0 2px rgba(88,166,255,.2)}
+.fz-demo-viz{margin:1rem 0}
+.fz-row{display:flex;align-items:center;gap:.5rem;margin:.3rem 0;padding:.2rem 0}
+.fz-label{color:var(--td);font-size:.72rem;min-width:75px;text-align:right}
+.fz-label-b{color:var(--ac)}.fz-label-g{color:var(--a2)}
+.fz-content{font-family:var(--mo);font-size:.85rem;display:flex;gap:0}
+.fz-content-m{color:var(--gn)}.fz-content-t{color:var(--ac)}.fz-content-g{color:var(--a2)}
+.fz-cursor{color:var(--yl);font-size:1.2rem;margin:0 .1rem}
+.fz-note{color:var(--td);font-size:.7rem;margin-left:.3rem}
+.fz-demo-info{margin-top:.5rem}
+.fz-demo-stat{font-family:var(--mo);font-size:.8rem}
+
+/* FIM Context Visualization */
+.fim-viz{margin:1.5rem 0}
+.fim-editor{background:var(--sf);border:1px solid var(--bd);border-radius:8px;overflow:hidden;margin-bottom:1rem}
+.fim-lines{display:flex;flex-direction:column;font-family:var(--mo);font-size:.85rem;line-height:1.7}
+.fim-line{display:flex;align-items:center;padding:0 1rem;color:var(--tx);opacity:.9}
+.fim-gutter{width:3rem;border-right:1px solid var(--bd)}
+.fim-lineno{display:inline-block;width:2.5rem;text-align:right;padding-right:.5rem;color:var(--td);opacity:.5;font-size:.75rem;flex-shrink:0}
+.fim-line.px{background:rgba(88,166,255,.12)}
+.fim-line.cur{background:rgba(240,136,62,.15)}
+.fim-line.sx{background:rgba(63,185,80,.12)}
+.fim-mid{color:var(--a2);font-weight:700}
+.fim-cursor{color:var(--yl);font-size:1.1rem;margin:0 .15rem}
+.fim-suf{color:var(--gn)}
+.fim-bracket{position:absolute;width:4px;border-radius:0 4px 4px 0}
+.fim-br-l{left:0;top:0;height:100%}
+.fim-legend{display:flex;gap:1.5rem;padding:.75rem 0;flex-wrap:wrap}
+.fim-legend-item{display:flex;align-items:center;gap:.5rem;font-size:.9rem;color:var(--tx)}
+.fim-legend-dot{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+.fim-ld-p{background:var(--ac)}.fim-ld-m{background:var(--a2)}.fim-ld-s{background:var(--gn)}
+.fim-legend-sub{color:var(--td);font-size:.78rem;margin-left:.25rem}
+.fim-assembled{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1rem;margin-top:1rem}
+.fim-asm-row{display:flex;align-items:flex-start;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--bd)}
+.fim-asm-row:last-child{border-bottom:none}
+.fim-asm-label{font-family:var(--mo);font-size:.72rem;font-weight:700;min-width:4.5rem;padding-top:.25rem;flex-shrink:0;text-transform:uppercase;letter-spacing:.05em}
+.fim-asm-row:nth-child(1) .fim-asm-label{color:var(--ac)}
+.fim-asm-row:nth-child(2) .fim-asm-label{color:var(--a2)}
+.fim-asm-row:nth-child(3) .fim-asm-label{color:var(--gn)}
+.fim-asm-dot{width:8px;height:8px;border-radius:50%;margin-top:.45rem;flex-shrink:0}
+.fim-ad-p{background:var(--ac)}.fim-ad-m{background:var(--a2)}.fim-ad-s{background:var(--gn)}
+.fim-asm-code{font-family:var(--mo);font-size:.82rem;color:var(--tx);word-break:break-all}
+.fim-asm-row:nth-child(1) .fim-asm-code{color:var(--ac)}
+.fim-asm-row:nth-child(2) .fim-asm-code{color:var(--a2)}
+.fim-asm-row:nth-child(3) .fim-asm-code{color:var(--gn)}
+.fim-flow{display:flex;align-items:center;justify-content:center;gap:2rem;padding:1.5rem 0;margin:1rem 0}
+.fim-flow-box{text-align:center;padding:1.25rem 1.5rem;background:var(--sf);border:1px solid var(--bd);border-radius:8px;min-width:140px}
+.fim-fb-icon{font-size:1.5rem;color:var(--td);margin-bottom:.3rem}
+.fim-fb-title{font-weight:600;font-size:1rem;color:var(--tx)}
+.fim-fb-detail{color:var(--tx);font-size:.82rem;margin:.3rem 0 .6rem;opacity:.85}
+.fim-fb-value{font-family:var(--mo);font-size:.78rem;padding:.25rem .6rem;background:var(--sf2);border-radius:4px;display:inline-block;color:var(--tx)}
+.fim-fb-p{border-color:var(--ac)}.fim-fb-p .fim-fb-icon{color:var(--ac)}.fim-fb-p .fim-fb-title{color:var(--ac)}
+.fim-fb-s{border-color:var(--gn)}.fim-fb-s .fim-fb-icon{color:var(--gn)}.fim-fb-s .fim-fb-title{color:var(--gn)}
+.fim-flow-center{text-align:center}
+.fim-flow-cursor{font-size:2rem;color:var(--yl)}
+.fim-flow-label{color:var(--td);font-size:.78rem;opacity:.8}
+
+@media(max-width:700px){.toc ul{columns:1}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<h1>llama.vim &mdash; FIM Architecture</h1>
+<p class="sub">Fill-in-the-Middle completion system for local LLM-assisted code editing</p>
+
+<nav class="toc">
+<h3>Contents</h3>
+<ul>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#flow">Request Flow</a></li>
+<li><a href="#trigger">Trigger Mechanism</a></li>
+<li><a href="#context">Local Context</a></li>
+<li><a href="#cache">LRU Cache</a></li>
+<li><a href="#fuzzy">Fuzzy Matching</a></li>
+<li><a href="#ring">Ring Buffer</a></li>
+<li><a href="#payload">Request Payload</a></li>
+<li><a href="#response">Response &amp; Render</a></li>
+<li><a href="#spec">Speculative Pipeline</a></li>
+<li><a href="#accept">Accept Modes</a></li>
+<li><a href="#timing">Timing</a></li>
+<li><a href="#config">Configuration</a></li>
+</ul>
+</nav>
+
+<!-- ═══════════ OVERVIEW ═══════════ -->
+<section id="overview"><h2>Overview</h2>
+<p>llama.vim provides real-time code completions using a local llama.cpp server with FIM (Fill-in-the-Middle) models. Three pillars:</p>
+<div class="grid">
+<div class="card"><h3>&#x1F525; Local Context</h3><p>Extracts <code>n_prefix</code> lines before and <code>n_suffix</code> lines after the cursor, forming the prefix/middle/suffix structure FIM models consume.</p></div>
+<div class="card"><h3>&#x1F4BE; LRU Cache</h3><p>SHA-256 keyed cache (250 entries) with fuzzy matching over the last 128 typed characters &mdash; instant recall without server round-trips.</p></div>
+<div class="card"><h3>&#x1F504; Ring Buffer</h3><p>Sliding window of code chunks gathered from yanks, buffer transitions, and file saves. Provides cross-file global context with similarity-based eviction.</p></div>
+<div class="card"><h3>&#x26A1; Speculative Warm-up</h3><p>After a cached hint renders, a background request warms the server KV cache for the next cursor position, making subsequent completions feel instant.</p></div>
+</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ FLOW ═══════════ -->
+<section id="flow"><h2>Request Flow</h2>
+<p>Every cursor movement in Insert mode triggers this pipeline:</p>
+<div class="fc"><div class="fl">
+<div class="fn tr">CursorMovedI &rarr; s:on_move()</div><div class="fa"></div>
+<div class="fn">llama#fim_hide() &mdash; clear previous suggestion</div><div class="fa"></div>
+<div class="fn ca">s:fim_try_hint(pos_x, pos_y)</div><div class="fa"></div>
+<div style="width:100%;text-align:center"><div class="fla">Check LRU cache (exact hash + fuzzy 128-char)</div></div><div class="fa"></div>
+<div class="fb">
+<div><div class="fla" style="color:var(--gn)">&check; Cache hit</div><div class="fa"></div>
+<div class="fn re">s:fim_render()</div><div class="fa"></div>
+<div class="fn" style="border-color:var(--yl);color:var(--yl)">llama#fim(prev) &mdash; speculative warm-up</div></div>
+<div><div class="fla" style="color:var(--rd)">&#x2717; Cache miss</div><div class="fa"></div>
+<div class="fn rq">llama#fim() &mdash; build context + ring buffer</div><div class="fa"></div>
+<div class="fn sr">Async curl &rarr; llama.cpp /infill</div><div class="fa"></div>
+<div class="fn">s:fim_on_response() &rarr; cache insert</div><div class="fa"></div>
+<div class="fn re">s:fim_try_hint() &rarr; s:fim_render()</div></div>
+</div></div></div>
+
+<div class="seq">
+<span class="ss" style="color:var(--yl)">1. CursorMoveI</span><span class="sa">&rarr;</span>
+<span class="ss" style="color:var(--td)">2. fim_hide()</span><span class="sa">&rarr;</span>
+<span class="ss" style="color:var(--ac)">3. fim_try_hint()</span><span class="sa">&rarr;</span>
+<span class="ss" style="color:var(--a2)">4. llama#fim()</span><span class="sa">&rarr;</span>
+<span class="ss" style="color:var(--pu)">5. curl /infill</span><span class="sa">&rarr;</span>
+<span class="ss" style="color:var(--ac)">6. cache insert</span><span class="sa">&rarr;</span>
+<span class="ss" style="color:var(--gn)">7. fim_render()</span>
+</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ TRIGGER ═══════════ -->
+<section id="trigger"><h2>Trigger Mechanism</h2>
+<p>Two autocmds fire on every <code>CursorMovedI</code>:</p>
+<pre><span class="k">autocmd</span> CursorMovedI <span class="t">*</span> <span class="f">call</span> s:on_move()                       <span class="c">" try cache first</span>
+<span class="k">autocmd</span> CursorMovedI <span class="t">*</span> <span class="f">call</span> llama#fim(-1,-1,v:true,[],v:true) <span class="c">" fire if needed</span></pre>
+<p>The first clears the hint and checks cache. The second fires an async request if cache misses. This dual-trigger ensures instant display from cache while the server fetches fresh completion in parallel.</p>
+<div class="grid">
+<div class="card"><h3>Max line suffix</h3><p>If more than <code>max_line_suffix</code> (default <code>8</code>) chars remain on the line, auto-trigger is suppressed &mdash; user is likely mid-word.</p></div>
+<div class="card"><h3>Request debounce</h3><p>If <code>s:current_job_fim</code> is running, the request is debounced with a <code>100ms</code> retry timer to prevent request storms.</p></div>
+</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ LOCAL CONTEXT ═══════════ -->
+<section id="context"><h2>Local Context Construction</h2>
+<p><code>s:fim_ctx_local(pos_x, pos_y, prev)</code> extracts the FIM triple from the buffer. Here's how the three parts map to actual code:</p>
+
+<div class="fim-viz">
+<div class="fim-editor">
+<div class="fim-gutter"></div>
+<div class="fim-lines">
+<div class="fim-line px"><span class="fim-lineno">4</span>def calculate_total(items):</div>
+<div class="fim-line px"><span class="fim-lineno">5</span>    total = 0</div>
+<div class="fim-line px"><span class="fim-lineno">6</span>    for item in items:</div>
+<div class="fim-line cur"><span class="fim-lineno">7</span>    <span class="fim-mid">total += item.</span><span class="fim-cursor">&#x276F;</span><span class="fim-suf">price</span></div>
+<div class="fim-line sx"><span class="fim-lineno">8</span>    return total</div>
+<div class="fim-line sx"><span class="fim-lineno">9</span></div>
+<div class="fim-line sx"><span class="fim-lineno">10</span>def apply_discount(total, pct):</div>
+</div>
+</div>
+
+<div class="fim-legend">
+<div class="fim-legend-item">
+<div class="fim-legend-dot fim-ld-p"></div>
+<div><strong>Prefix</strong> <span class="fim-legend-sub">(lines before cursor)</span></div>
+</div>
+<div class="fim-legend-item">
+<div class="fim-legend-dot fim-ld-m"></div>
+<div><strong>Middle</strong> <span class="fim-legend-sub">(text before cursor)</span></div>
+</div>
+<div class="fim-legend-item">
+<div class="fim-legend-dot fim-ld-s"></div>
+<div><strong>Suffix</strong> <span class="fim-legend-sub">(text after cursor + lines after)</span></div>
+</div>
+</div>
+
+<div class="fim-assembled">
+<div class="fim-asm-row">
+<span class="fim-asm-label">prefix</span>
+<span class="fim-asm-dot fim-ad-p"></span>
+<span class="fim-asm-code">def calculate_total(items):\n    total = 0\n    for item in items:\n    </span>
+</div>
+<div class="fim-asm-row">
+<span class="fim-asm-label">middle</span>
+<span class="fim-asm-dot fim-ad-m"></span>
+<span class="fim-asm-code">total += item.</span>
+</div>
+<div class="fim-asm-row">
+<span class="fim-asm-label">suffix</span>
+<span class="fim-asm-dot fim-ad-s"></span>
+<span class="fim-asm-code">price\n    return total\n\ndef apply_discount(total, pct):\n</span>
+</div>
+</div>
+
+<pre><span class="c">" Structure:</span>
+prefix = lines[pos_y - n_prefix .. pos_y-1] <span class="s">"\n"</span>
+middle = line_cur[0 .. pos_x]
+suffix = line_cur[pos_x ..] <span class="s">"\n"</span> + lines[pos_y+1 .. pos_y+n_suffix] <span class="s">"\n"</span></pre>
+
+<div class="fim-flow">
+<div class="fim-flow-box fim-fb-p">
+<div class="fim-fb-icon">↑</div>
+<div class="fim-fb-title">Prefix</div>
+<div class="fim-fb-detail">256 lines above</div>
+<div class="fim-fb-value">n_prefix</div>
+</div>
+<div class="fim-flow-center">
+<div class="fim-flow-cursor">&#x276F;</div>
+<div class="fim-flow-label">cursor</div>
+</div>
+<div class="fim-flow-box fim-fb-s">
+<div class="fim-fb-icon">↓</div>
+<div class="fim-fb-title">Suffix</div>
+<div class="fim-fb-detail">64 lines below</div>
+<div class="fim-fb-value">n_suffix</div>
+</div>
+</div>
+</div>
+
+<ul>
+<li><strong>Whitespace-only lines</strong> &mdash; cursor treated as column 0</li>
+<li><strong>Speculative mode</strong> (<code>a:prev</code> provided) &mdash; context rebuilt as if the previous completion was already inserted, shifting prefix boundary forward</li>
+<li><strong>Indentation tracking</strong> &mdash; sent as <code>n_indent</code> for alignment</li>
+</ul>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ CACHE ═══════════ -->
+<section id="cache"><h2>LRU Cache System</h2>
+<pre><span class="t">g:cache_data</span>     = {}      <span class="c">" hash &rarr; raw JSON</span>
+<span class="t">g:cache_lru_order</span> = []     <span class="c">" ordered keys (oldest first)</span></pre>
+<p>Key = <code>sha256(prefix + 'Î' + middle + 'Î' + suffix)</code>. The <code>Î</code> matches the FIM token used by models.</p>
+<h3>Multi-hash generation</h3>
+<p>Each request computes <strong>4 hashes</strong> &mdash; full context plus 3 variants with 1&ndash;3 prefix lines stripped. Handles the case where the user scrolled down from the original position:</p>
+<pre><span class="c">" Hash 0:</span> sha256(prefix + middle + <span class="s">'Î'</span> + suffix)
+<span class="c">" Hash 1:</span> sha256(prefix[1:] + middle + <span class="s">'Î'</span> + suffix)
+<span class="c">" Hash 2:</span> sha256(prefix[2:] + middle + <span class="s">'Î'</span> + suffix)
+<span class="c">" Hash 3:</span> sha256(prefix[3:] + middle + <span class="s">'Î'</span> + suffix)</pre>
+<p>On eviction (>250 entries), the least recently used key is removed. Every <code>cache_get</code> moves the key to the end of the LRU list.</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ FUZZY ═══════════ -->
+<section id="fuzzy"><h2>Fuzzy Matching</h2>
+<p>When no exact hash match, <code>s:fim_try_hint()</code> walks back up to <strong>128 characters</strong> and checks if a cached completion exists whose content matches what the user has already typed:</p>
+
+<div class="fz">
+<p style="color:var(--tx);margin-bottom:.6rem;font-size:.85rem"><strong>Scenario:</strong> cached = <code>function fetchData(url) {</code>, user typed <code>function fetch</code></p>
+<div class="fz-p">
+<span class="fz-l"></span>
+<span class="fz-c m">f</span><span class="fz-c m">u</span><span class="fz-c m">n</span><span class="fz-c m">c</span><span class="fz-c m">t</span><span class="fz-c m">i</span><span class="fz-c m">o</span><span class="fz-c m">n</span><span class="fz-c m"> </span>
+<span class="fz-c m">f</span><span class="fz-c m">e</span><span class="fz-c m">t</span><span class="fz-c m">c</span><span class="fz-c m">h</span><span class="fz-c m">D</span><span class="fz-c m">a</span><span class="fz-c m">t</span><span class="fz-c m">a</span><span class="fz-c m">(</span><span class="fz-c m">u</span><span class="fz-c m">r</span><span class="fz-c m">l</span><span class="fz-c m">)</span><span class="fz-c m"> </span><span class="fz-c m">{</span>
+<span style="color:var(--td);font-size:.7rem;margin-left:.3rem">cached completion</span></div>
+<div class="fz-p">
+<span class="fz-l" style="color:var(--ac)">Buffer:</span>
+<span class="fz-c t">f</span><span class="fz-c t">u</span><span class="fz-c t">n</span><span class="fz-c t">c</span><span class="fz-c t">t</span><span class="fz-c t">i</span><span class="fz-c t">o</span><span class="fz-c t">n</span><span class="fz-c t"> </span>
+<span class="fz-c t">f</span><span class="fz-c t">e</span><span class="fz-c t">t</span><span class="fz-c t">c</span><span class="fz-c t">h</span><span style="color:var(--yl);font-size:1.2rem;vertical-align:middle;margin:0 .1rem">&#x276F;</span>
+<span style="color:var(--td);font-size:.7rem;margin-left:.3rem">cursor here</span></div>
+<div class="fz-p">
+<span class="fz-l" style="color:var(--a2)">Ghost:</span>
+<span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span><span class="fz-c d"> </span>
+<span class="fz-c g">D</span><span class="fz-c g">a</span><span class="fz-c g">t</span><span class="fz-c g">a</span><span class="fz-c g">(</span><span class="fz-c g">u</span><span class="fz-c g">r</span><span class="fz-c g">l</span><span class="fz-c g">)</span><span class="fz-c g"> </span><span class="fz-c g">{</span>
+<span style="color:var(--td);font-size:.7rem;margin-left:.3rem">remainder shown at cursor</span></div>
+</div>
+
+<div class="fz-demo">
+<p style="color:var(--tx);margin-bottom:.6rem;font-size:.85rem"><strong>Interactive demo:</strong> type to match the cached completion</p>
+<div class="fz-demo-input">
+<label for="fuzzy-input">Cached: <code>return items.map(i => i.price)</code></label>
+<input type="text" id="fuzzy-input" placeholder="Start typing..." autocomplete="off" spellcheck="false">
+</div>
+<div class="fz-demo-viz">
+<div class="fz-row">
+<span class="fz-label"></span>
+<span class="fz-content fz-content-m">return items.map(i => i.price)</span>
+<span class="fz-note">cached completion</span>
+</div>
+<div class="fz-row">
+<span class="fz-label fz-label-b">Buffer:</span>
+<span class="fz-content fz-content-t" id="fz-buffer"></span>
+<span class="fz-cursor">&#x276F;</span>
+<span class="fz-note">cursor</span>
+</div>
+<div class="fz-row">
+<span class="fz-label fz-label-g">Ghost:</span>
+<span class="fz-content fz-content-g" id="fz-ghost"></span>
+<span class="fz-note">remainder</span>
+</div>
+</div>
+<div class="fz-demo-info">
+<span class="fz-demo-stat" id="fz-stat" style="color:var(--td)">Type to see the match</span>
+</div>
+</div>
+
+<pre><span class="k">for</span> i <span class="k">in</span> <span class="f">range</span>(<span class="n">128</span>)
+  l:removed = l:pm[-(<span class="n">1</span>+i):]            <span class="c">" last (i+1) chars typed</span>
+  l:ctx_new = l:pm[:-(<span class="n">2</span>+i)] + <span class="s">'Î'</span> + l:suffix
+  l:cached  = s:cache_get(<span class="f">sha256</span>(l:ctx_new))
+  <span class="k">if</span> cached.content[0:i] ==# l:removed <span class="c">" typed matches cached start</span>
+    l:remainder = cached.content[i+1:]  <span class="c">" show the rest as ghost text</span></pre>
+
+<div class="ib g"><strong>Key insight:</strong> As you type characters that match a previously cached completion, the plugin shows the <em>remaining</em> portion as ghost text &mdash; all without hitting the server. The <code>fuzzy_offset</code> is stored so cycling completions applies the same trimming.</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ RING BUFFER ═══════════ -->
+<section id="ring"><h2>Ring Buffer Context</h2>
+<p>The ring buffer accumulates code chunks for <strong>global cross-file context</strong>:</p>
+<div class="rv">
+<div class="rs q">queued<span>chunk</span></div>
+<div class="rs q">queued<span>chunk</span></div>
+<div class="rs q">queued<span>chunk</span></div>
+<div style="display:flex;align-items:center;padding:0 .4rem;color:var(--td);font-size:1.1rem">&rarr;</div>
+<div class="rs a">file_A<span>active</span></div>
+<div class="rs a">file_B<span>active</span></div>
+<div class="rs a">yanked<span>active</span></div>
+<div class="rs a">file_C<span>active</span></div>
+<div class="rs a">file_D<span>active</span></div>
+<div class="rs e">&nbsp;<span>empty</span></div>
+</div>
+
+<h3>Chunk sources</h3>
+<table>
+<tr><th>Source</th><th>Event</th><th>Details</th></tr>
+<tr><td><code>TextYankPost</code></td><td>Yank</td><td>Regcontents &mdash; captures selected code</td></tr>
+<tr><td><code>BufEnter</code></td><td>Switch</td><td>Lines around cursor (chunk_size/2 each direction)</td></tr>
+<tr><td><code>BufLeave</code></td><td>Switch</td><td>Same as BufEnter &mdash; preserves left-behind context</td></tr>
+<tr><td><code>BufWritePost</code></td><td>Save</td><td>Saved state around cursor</td></tr>
+<tr><td><code>llama#fim()</code></td><td>FIM</td><td>Expanded prefix/suffix when cursor moved &gt;32 lines</td></tr>
+</table>
+
+<h3>Similarity eviction</h3>
+<p>Chunks compared using <strong>Dice coefficient</strong> over whitespace-split tokens:</p>
+<pre>similarity = 2 &times; |common tokens| / (|tokens&#x2080;| + |tokens&#x2081;|)
+
+<span class="c">" Thresholds:</span>
+0.9  &rarr; evict from <span class="t">queued</span> + <span class="t">active</span> (on pick_chunk)
+0.5  &rarr; evict from <span class="t">active</span> only     (during FIM request)</pre>
+
+<div class="ib w"><strong>Why 0.5 for FIM?</strong> Chunks similar to current context (even at lower similarity) distort completions by making the LLM repeat on-screen code.</div>
+
+<h3>Background warm-up</h3>
+<p>Every <code>ring_update_ms</code> (default 1000ms), a queued chunk moves to active. A warm-up request with empty prefix/suffix but full extra context pre-computes the KV cache:</p>
+<pre>{
+  <span class="s">"input_prefix"</span>: <span class="s">""</span>, <span class="s">"input_suffix"</span>: <span class="s">""</span>,
+  <span class="s">"input_extra"</span>: [...], <span class="s">"prompt"</span>: <span class="s">""</span>,
+  <span class="s">"n_predict"</span>: <span class="n">0</span>, <span class="s">"samplers"</span>: [],
+  <span class="s">"cache_prompt"</span>: <span class="k">true</span>, <span class="s">"t_max_predict_ms"</span>: <span class="n">1</span>
+}</pre>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ PAYLOAD ═══════════ -->
+<section id="payload"><h2>Request Payload</h2>
+<pre>{
+  <span class="s">"input_prefix"</span>:     <span class="s">"256 lines of code before cursor\n"</span>,
+  <span class="s">"input_suffix"</span>:     <span class="s">"text after cursor + 64 lines\n"</span>,
+  <span class="s">"input_extra"</span>:      [{ <span class="s">"text"</span>:<span class="s">"..."</span>, <span class="s">"time"</span>:<span class="s">"..."</span>, <span class="s">"filename"</span>:<span class="s">"..."</span> }],
+  <span class="s">"prompt"</span>:           <span class="s">"text on current line before cursor"</span>,
+  <span class="s">"n_predict"</span>:        <span class="n">128</span>,
+  <span class="s">"n_cmpl"</span>:           <span class="n">1</span>,
+  <span class="s">"stop"</span>:             [],
+  <span class="s">"n_indent"</span>:         <span class="n">4</span>,
+  <span class="s">"top_k"</span>:            <span class="n">40</span>,
+  <span class="s">"top_p"</span>:            <span class="n">0.90</span>,
+  <span class="s">"samplers"</span>:         [<span class="s">"top_k"</span>, <span class="s">"top_p"</span>, <span class="s">"infill"</span>],
+  <span class="s">"stream"</span>:           <span class="k">false</span>,
+  <span class="s">"cache_prompt"</span>:     <span class="k">true</span>,
+  <span class="s">"t_max_prompt_ms"</span>:  <span class="n">500</span>,
+  <span class="s">"t_max_predict_ms"</span>: <span class="n">250</span>   <span class="c">" 250 first, 1000 follow-up</span>
+}</pre>
+
+<h3>Response fields</h3>
+<table>
+<tr><th>Field</th><th>Meaning</th></tr>
+<tr><td><code>content</code></td><td>Generated completion text</td></tr>
+<tr><td><code>timings/prompt_n</code></td><td>Prompt tokens processed</td></tr>
+<tr><td><code>timings/prompt_ms</code></td><td>Prompt processing time</td></tr>
+<tr><td><code>timings/prompt_per_second</code></td><td>Prompt throughput (tok/s)</td></tr>
+<tr><td><code>timings/predicted_n</code></td><td>Tokens generated</td></tr>
+<tr><td><code>timings/predicted_ms</code></td><td>Generation time</td></tr>
+<tr><td><code>timings/predicted_per_second</code></td><td>Generation throughput (tok/s)</td></tr>
+<tr><td><code>tokens_cached</code></td><td>Tokens served from KV cache</td></tr>
+<tr><td><code>truncated</code></td><td>Context was full</td></tr>
+</table>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ RESPONSE ═══════════ -->
+<section id="response"><h2>Response &amp; Rendering</h2>
+<p><code>s:fim_on_response()</code> validates JSON, caches under all 4 hashes, then delegates to <code>s:fim_try_hint()</code>.</p>
+<h3>Repetition filtering in s:fim_render()</h3>
+<table>
+<tr><th>Check</th><th>Action</th></tr>
+<tr><td>Single empty line</td><td>Truncate to <code>[""]</code></td></tr>
+<tr><td>Empty +1st + rest matches upcoming</td><td>Truncate</td></tr>
+<tr><td>Content = current line suffix</td><td>Truncate</td></tr>
+<tr><td>Content = next non-empty line</td><td>Truncate</td></tr>
+<tr><td>Multi-line = upcoming lines</td><td>Truncate</td></tr>
+<tr><td>All whitespace</td><td><code>can_accept = false</code></td></tr>
+</table>
+<h3>Dual API</h3>
+<div class="grid">
+<div class="card"><h3 style="color:var(--ac)">Neovim</h3><p><code>nvim_buf_set_extmark()</code> with <code>virt_text</code> (overlay) + <code>virt_lines</code> (below). Namespace: <code>'vt_fim'</code>.</p></div>
+<div class="card"><h3 style="color:var(--a2)">Vim 9.1+</h3><p><code>prop_add()</code> with <code>text</code> + <code>text_align:'below'</code> + <code>text_padding_left</code>. Feature: <code>has('textprop')</code>.</p></div>
+</div>
+<h3>Info line</h3>
+<div class="sb">
+<span class="st"><span class="sk">c:</span> <span class="sv">15186</span></span>
+<span class="st"><span class="sk">r:</span> <span class="sv">30/64</span></span>
+<span class="st"><span class="sk">e:</span> <span class="sv">1</span></span>
+<span class="st"><span class="sk">q:</span> <span class="sv">0/16</span></span>
+<span class="st"><span class="sk">C:</span> <span class="sv">42/250</span></span>
+<span class="st"><span class="sk">p:</span> <span class="sv">260 (45.20 ms, 5752 t/s)</span></span>
+<span class="st"><span class="sk">g:</span> <span class="sv">24 (1245 ms, 19 t/s)</span></span>
+<span class="st"><span class="sk">[1/3]</span></span>
+</div>
+<table>
+<tr><th>c</th><td>Tokens from KV cache</td></tr>
+<tr><th>r</th><td>Ring chunks active / max</td></tr>
+<tr><th>e</th><td>Chunks evicted</td></tr>
+<tr><th>q</th><td>Queued / 16</td></tr>
+<tr><th>C</th><td>Cache entries / max</td></tr>
+<tr><th>p</th><td>Prompt: tokens (time, speed)</td></tr>
+<tr><th>g</th><td>Generated: tokens (time, speed)</td></tr>
+</table>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ SPECULATIVE ═══════════ -->
+<section id="spec"><h2>Speculative Pipeline</h2>
+<p>After a cached hint renders, a background speculative request fires:</p>
+<div class="fc"><div class="fl" style="min-width:450px">
+<div class="fn sp-hit">Cache hit &rarr; s:fim_render() &rarr; ghost text shown</div><div class="fa"></div>
+<div style="width:100%;text-align:center"><div class="fla sp-bg">Background: speculative warm-up</div></div><div class="fa"></div>
+<div class="fn sp-call">llama#fim(pos, prev_completion, use_cache=true)</div><div class="fa"></div>
+<div class="fn sp-ctx">s:fim_ctx_local &mdash; rebuild context <em>as if</em> completion typed</div><div class="fa"></div>
+<div class="fn sp-warm">Server warms KV cache for next position</div><div class="fa"></div>
+<div class="fn sp-done">Response cached &rarr; instant on next cursor move</div>
+</div></div>
+<p>The speculative request passes <code>a:prev</code> (the displayed completion) to <code>s:fim_ctx_local()</code>, which rebuilds context as if the completion was already inserted. The server caches this context, so accepting the completion and moving on feels instant.</p>
+<div class="ib g"><strong>Two-phase timing:</strong> First request = <code>250ms</code> (fast). Speculative follow-up = <code>1000ms</code> (thorough).</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ ACCEPT ═══════════ -->
+<section id="accept"><h2>Accept Modes</h2>
+<div class="grid">
+<div class="card"><h3><code>full</code> <span class="tag r">Tab</span></h3><p>Entire multi-line suggestion. Replaces line suffix, appends remaining lines. Cursor to end of last line.</p></div>
+<div class="card"><h3><code>line</code> <span class="tag r">S-Tab</span></h3><p>First line only. Cursor to end. If multi-line, simulates Enter for next line.</p></div>
+<div class="card"><h3><code>word</code> <span class="tag r">leader+ll]</span></h3><p>First word (whitespace + non-whitespace) from suggestion. Cursor to end of word.</p></div>
+</div>
+<h3>Cycling</h3>
+<p>When <code>n_cmpl &gt; 1</code>, cycle with <code>&lt;C-J&gt;</code> (next) / <code>&lt;C-K&gt;</code> (prev). Uses <code>inoremap &lt;expr&gt;</code> to stay in Insert mode (<code>&lt;C-O&gt;</code> would trigger <code>InsertLeavePre</code> &rarr; <code>fim_hide</code>).</p>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ TIMING ═══════════ -->
+<section id="timing"><h2>Timing &amp; Throttling</h2>
+<div class="grid">
+<div class="card"><h3>Debounce</h3><p>Running job &rarr; <code>100ms</code> retry. Prevents request storms.</p></div>
+<div class="card"><h3>Two-phase</h3><p>First: <code>250ms</code> predict. Follow-up: <code>1000ms</code>.</p></div>
+<div class="card"><h3>Ring update</h3><p>Every <code>1000ms</code>. Skipped if insert mode + cursor moved &lt;3s ago.</p></div>
+<div class="card"><h3>Chunk pick</h3><p>Only when cursor moved &gt;32 lines from last pick.</p></div>
+</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════ CONFIG ═══════════ -->
+<section id="config"><h2>Configuration Reference</h2>
+<table>
+<tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+<tr><td><code>endpoint_fim</code></td><td><code>http://127.0.0.1:8012/infill</code></td><td>llama.cpp FIM endpoint</td></tr>
+<tr><td><code>model_fim</code></td><td><code>""</code></td><td>Model name (when multiple loaded)</td></tr>
+<tr><td><code>api_key</code></td><td><code>""</code></td><td>Server API key</td></tr>
+<tr><td><code>n_prefix</code></td><td><code>256</code></td><td>Lines before cursor</td></tr>
+<tr><td><code>n_suffix</code></td><td><code>64</code></td><td>Lines after cursor</td></tr>
+<tr><td><code>n_predict</code></td><td><code>128</code></td><td>Max tokens to generate</td></tr>
+<tr><td><code>n_cmpl</code></td><td><code>1</code></td><td>Completions per request</td></tr>
+<tr><td><code>stop_strings</code></td><td><code>[]</code></td><td>Early stop triggers</td></tr>
+<tr><td><code>t_max_prompt_ms</code></td><td><code>500</code></td><td>Max prompt time</td></tr>
+<tr><td><code>t_max_predict_ms</code></td><td><code>1000</code></td><td>Max predict time</td></tr>
+<tr><td><code>show_info</code></td><td><code>2</code></td><td>0=off, 1=statusline, 2=inline</td></tr>
+<tr><td><code>auto_fim</code></td><td><code>true</code></td><td>Auto-trigger on cursor move</td></tr>
+<tr><td><code>max_line_suffix</code></td><td><code>8</code></td><td>Max chars to right to auto-trigger</td></tr>
+<tr><td><code>max_cache_keys</code></td><td><code>250</code></td><td>Max cached completions</td></tr>
+<tr><td><code>ring_n_chunks</code></td><td><code>16</code></td><td>Active ring slots (0=disabled)</td></tr>
+<tr><td><code>ring_chunk_size</code></td><td><code>64</code></td><td>Lines per chunk</td></tr>
+<tr><td><code>ring_scope</code></td><td><code>1024</code></td><td>Range for gathering chunks</td></tr>
+<tr><td><code>ring_update_ms</code></td><td><code>1000</code></td><td>Ring background update interval</td></tr>
+</table>
+
+<h3>Keymaps</h3>
+<table>
+<tr><th>Parameter</th><th>Default</th><th>Action</th></tr>
+<tr><td><code>keymap_fim_trigger</code></td><td><code>&lt;leader&gt;llf</code></td><td>Manual FIM trigger</td></tr>
+<tr><td><code>keymap_fim_accept_full</code></td><td><code>&lt;Tab&gt;</code></td><td>Accept full suggestion</td></tr>
+<tr><td><code>keymap_fim_accept_line</code></td><td><code>&lt;S-Tab&gt;</code></td><td>Accept first line</td></tr>
+<tr><td><code>keymap_fim_accept_word</code></td><td><code>&lt;leader&gt;ll]</code></td><td>Accept first word</td></tr>
+<tr><td><code>keymap_fim_next</code></td><td><code>&lt;C-J&gt;</code></td><td>Next completion</td></tr>
+<tr><td><code>keymap_fim_prev</code></td><td><code>&lt;C-K&gt;</code></td><td>Previous completion</td></tr>
+<tr><td><code>keymap_debug_toggle</code></td><td><code>&lt;leader&gt;lld</code></td><td>Toggle debug pane</td></tr>
+</table>
+</section>
+
+<div class="divider"></div>
+
+<p style="text-align:center;color:var(--td);font-size:.85rem;padding:1rem 0">llama.vim &mdash; <a href="https://github.com/ggml-org/llama.vim" style="color:var(--ac)">github.com/ggml-org/llama.vim</a></p>
+
+<script>
+(function(){
+const cached="return items.map(i => i.price)";
+const input=document.getElementById("fuzzy-input");
+const bufferEl=document.getElementById("fz-buffer");
+const ghostEl=document.getElementById("fz-ghost");
+const statEl=document.getElementById("fz-stat");
+if(!input||!bufferEl||!ghostEl||!statEl)return;
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function update(){
+const typed=input.value;
+// Build buffer visualization
+bufferEl.innerHTML=Array.from(typed).map(c=>`<span style="background:rgba(88,166,255,.2);color:var(--ac);border-radius:3px;padding:0 .1rem">${esc(c)}</span>`).join("");
+// Check if typed matches start of cached
+if(typed&&cached.startsWith(typed)){
+const remainder=cached.slice(typed.length);
+ghostEl.innerHTML=Array.from(remainder).map(c=>`<span style="background:rgba(240,136,62,.2);color:var(--a2);border-radius:3px;padding:0 .1rem">${esc(c)}</span>`).join("");
+statEl.textContent=`✓ Match! Ghost: "${remainder}"`;
+statEl.style.color="var(--gn)";
+}else if(typed){
+ghostEl.innerHTML="";
+statEl.textContent="✗ No match";
+statEl.style.color="var(--rd)";
+}else{
+ghostEl.innerHTML="";
+statEl.textContent="Type to see the match";
+statEl.style.color="var(--td)";
+}
+}
+input.addEventListener("input",update);
+})();
+</script>
+
+</body>
+</html>
