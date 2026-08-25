@@ -3,6 +3,8 @@
 :LlamaDisable	llama.txt	/*:LlamaDisable*
 :LlamaEnable	llama.txt	/*:LlamaEnable*
 :LlamaInstruct	llama.txt	/*:LlamaInstruct*
+:LlamaProfile	llama.txt	/*:LlamaProfile*
+:LlamaProfileReset	llama.txt	/*:LlamaProfileReset*
 :LlamaToggle	llama.txt	/*:LlamaToggle*
 :LlamaToggleAutoFim	llama.txt	/*:LlamaToggleAutoFim*
 llama	llama.txt	/*llama*
