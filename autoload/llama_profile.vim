@@ -102,8 +102,25 @@ function! llama_profile#select(name, ...) abort
         let l:active = empty(g:llama_config.profile)
             \ ? '(custom endpoints)'
             \ : g:llama_config.profile
+
+        let l:profile_values = []
+        for l:name in l:names
+            let l:base = get(g:llama_config.profiles, l:name, '')
+            if type(l:base) == v:t_string && !empty(l:base)
+                call add(l:profile_values, l:name . ' (' . l:base . ')')
+            else
+                call add(l:profile_values, l:name . ' (invalid base URL)')
+            endif
+        endfor
+        let l:active_base = get(g:llama_config.profiles, g:llama_config.profile, '')
+        if type(l:active_base) == v:t_string && !empty(l:active_base)
+            let l:active .= ' (' . l:active_base . ')'
+        endif
+
         echo 'Active llama profile: ' . l:active
-        echo 'Available llama profiles: ' . (empty(l:names) ? '(none)' : join(l:names, ', '))
+        echo 'Available llama profiles: ' . (empty(l:profile_values)
+            \ ? '(none)'
+            \ : join(l:profile_values, ', '))
         return
     endif
 
