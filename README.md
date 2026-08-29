@@ -1,8 +1,16 @@
 # llama.vim
 
+<div align="center">
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/ggml-org/llama.vim?filter=v*)](https://github.com/ggml-org/llama.vim/releases)
+[![Actions Status](https://github.com/ggml-org/whisper.cpp/workflows/CI/badge.svg)](https://github.com/ggml-org/llama.vim/actions)
+
 Local LLM-assisted text completion.
 
 <img width="485" alt="image" src="https://github.com/user-attachments/assets/a950e38c-3b3f-4c46-94fe-0d6e0f790fc6">
+
+</div>
 
 #### Fill-in-Middle (FIM) completions
 
@@ -100,11 +108,42 @@ Examples:
 
     ```vim
     let g:llama_config.keymap_inst_trigger  = "<leader>lli"
-    let g:llama_config.keymap_inst_retry    = "<leader>llr"
+    let g:llama_config.keymap_inst_rerun    = "<leader>llr"
     let g:llama_config.keymap_inst_continue = "<leader>llc"
     let g:llama_config.keymap_inst_accept   = "<Tab>"
     let g:llama_config.keymap_inst_cancel   = "<Esc>"
     ```
+
+6. Configure named llama.cpp servers:
+
+    ```vim
+    let g:llama_config.profiles = {
+        \ 'spark':   'http://192.168.0.66:8080',
+        \ 'gmktec':  'http://192.168.0.65:8080',
+        \ }
+    let g:llama_config.profile = 'spark'
+    ```
+
+Use `:LlamaProfile` to show the available profiles and `:LlamaProfile spark`
+to switch both FIM and instruction requests to another server. Profile names
+support command-line completion. The selected profile is persisted and
+`:LlamaProfileReset` can be used to restore the profile (or custom endpoints)
+configured in `.vimrc`.
+
+This only allows the host servers to be specified, not the models used which are
+configured using `model_fim` and `model_inst`. But using consistent naming
+accross servers, or using server aliases, one can make this independant of the
+actual selected profile. For example, using something like:
+```console
+    \ 'model_fim':              'fim_model',
+    \ 'model_inst':             'inst_model',
+```
+And then in the server configuration, something like the following can be used:
+```console
+[qwen3.8-27B]
+alias                = inst_model,pi
+```
+And likewise for the fim_model.
 
 Please refer to `:help llama_config` or the [source](./autoload/llama.vim)
 for the full list of options.

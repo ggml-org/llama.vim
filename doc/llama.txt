@@ -16,17 +16,25 @@ Requires:
 ================================================================================
 Default Shortcut
 
+insert mode:
+
 - Tab         - accept the current suggestion
 - Shift+Tab   - accept just the first line of the suggestion
 - <leader>ll] - accept just the first word of the suggestion
 - <C-J>       - cycle to next completion (when multiple are available)
 - <C-K>       - cycle to previous completion (when multiple are available)
 - <leader>llf - trigger FIM completion manually
+
+visual mode:
+
 - <leader>lli - trigger instruction-based editing (instruct mode)
+
+normal mode:
+
 - <leader>llr - rerun the instruction
 - <leader>llc - continue the instruction
-- <leader>llr - accept the instruction (accept the instruction)
-- <leader>llq - cancel the instruction (cancel the instruction)
+- Tab         - accept the instruction
+- Esc         - cancel the instruction
 - <leader>lld - toggle the debug pane
 
 ================================================================================
@@ -51,6 +59,22 @@ Commands
 
 		Toggle autofim for this vim/nvim session
 		Equivalent to vimscript function: `llama#toggle_auto_fim()`
+
+*:LlamaProfile*
+
+		Show the active and available named profiles. Pass a profile
+		name to switch both FIM and instruction endpoints:
+
+>
+		:LlamaProfile spark
+<
+		Profile names support command-line completion.
+
+
+*:LlamaProfileReset*
+		Discard the saved profile selection and restore the profile (or
+		custom endpoints) configured when llama.vim was loaded, normally in
+		your .vimrc.
 
 *:LlamaInstruct*
 		Trigger instruction-based editing (instruct mode) on selected text
@@ -111,6 +135,8 @@ Currently the default config is:
 		    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
 		    \ 'fim_mode':               'infill',
 		    \ 'endpoint_base':          'http://127.0.0.1:8012',
+		    \ 'profiles':               {},
+		    \ 'profile':                '',
 		    \ 'model_fim':              '',
 		    \ 'model_inst':             '',
 		    \ 'api_key':                '',
@@ -119,7 +145,7 @@ Currently the default config is:
 		    \ 'n_predict':              128,
 		    \ 'n_cmpl':                 1,
 		    \ 'stop_strings_fim':       [],
- 			\ 'stop_strings_inst':      [],
+		    \ 'stop_strings_inst':      [],
 		    \ 't_max_prompt_ms':        500,
 		    \ 't_max_predict_ms':       1000,
 		    \ 'show_info':              2,
@@ -159,6 +185,14 @@ Currently the default config is:
 - {endpoint_base}		base URL of the llama.cpp server, used by fim_mode
 					'completion' for the /apply-template and /completion endpoints
 
+- {profiles}		    dictionary of named llama.cpp server base URLs. Selecting
+						a profile sets both endpoint_fim and endpoint_inst.
+
+- {profile}		        profile selected at startup. Leave empty to use
+						endpoint_fim and endpoint_inst directly.
+						A profile selected with |:LlamaProfile| is saved between
+						sessions and takes precedence until |:LlamaProfileReset|.
+
 - {api_key}				llama.cpp server api key (optional)
 
 - {model_fim}			model name for FIM completion (optional)
@@ -187,10 +221,10 @@ Currently the default config is:
 - {stop_strings_inst}	return the result immediately as soon as any of these
 						strings are encountered in the generated text for instruction completions
 
-- {t_max_prompt_ms}		max alloted time for the prompt processing
+- {t_max_prompt_ms}		max allowed time for the prompt processing
 						(TODO: not yet supported)
 
-- {t_max_predict_ms}	max alloted time for the prediction
+- {t_max_predict_ms}	max allowed time for the prediction
 
 - {show_info}			show extra info about the inference
 						(0 - disabled, 1 - statusline, 2 - inline)
@@ -227,21 +261,29 @@ parameters for the ring-buffer with extra context:
 
 keymaps parameters:
 
-- {keymap_fim_trigger}		keymap to trigger the auto completion, default: <C-F>
+- {keymap_fim_trigger}		keymap to trigger the auto completion, default: <leader>llf
 
 - {keymap_fim_accept_full}	keymap to accept full suggestion, default: <Tab>
 
 - {keymap_fim_accept_line}	keymap to accept line suggestion, default: <S-Tab>
 
-- {keymap_fim_accept_word}	keymap to accept word suggestion, default: <C-B>
+- {keymap_fim_accept_word}	keymap to accept word suggestion, default: <leader>ll]
 
 - {keymap_fim_next}		keymap to cycle to next completion, default: <C-J>
 
 - {keymap_fim_prev}		keymap to cycle to previous completion, default: <C-K>
 
-- {keymap_inst_trigger}		keymap to trigger instruction-based editing, default: null
+- {keymap_inst_trigger}		keymap to trigger instruction-based editing, default: <leader>lli
 
-- {keymap_debug_toggle}		keymap to toggle the debug pane, default: null
+- {keymap_inst_rerun}		keymap to rerun the instruction, default: <leader>llr
+
+- {keymap_inst_continue}	keymap to continue the instruction, default: <leader>llc
+
+- {keymap_inst_accept}		keymap to accept the instruction, default: <Tab>
+
+- {keymap_inst_cancel}		keymap to cancel the instruction, default: <Esc>
+
+- {keymap_debug_toggle}		keymap to toggle the debug pane, default: <leader>lld
 
 Example:
 
@@ -286,6 +328,20 @@ Example:
 				}
 			end,
 		}
+<
+5. Configure and switch between named llama.cpp servers:
+>vim
+		let g:llama_config.profiles = {
+		    \ 'spark':  'http://192.168.0.66:8080',
+		    \ 'gmktec': 'http://192.168.0.65:8080',
+		    \ }
+		let g:llama_config.profile = 'spark'
+
+		" Show the active and available profiles.
+		:LlamaProfile
+
+		" Switch FIM and instruction requests to another server.
+		:LlamaProfile gmktec
 <
 To adjust the colors for hint and info texts, `llama.vim` provides the
 highlight group `llama_hl_fim_hint` and `llama_hl_fim_info`. You can modify these

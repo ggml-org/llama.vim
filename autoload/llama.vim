@@ -17,6 +17,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 "   endpoint_fim:     llama.cpp server endpoint for FIM completion
 "   endpoint_inst:    llama.cpp server endpoint for instruction completion
+"   profiles:         named llama.cpp profiles
+"   profile:          profile selected at startup (empty to use the endpoints above)
 "   fim_mode:         FIM completion mode: 'infill' (native /infill endpoint) or 'completion' (emulated via /apply-template + /completion)
 "   model_fim:        model name in case when multiple models are loaded (optional, recommended: Qwen3 Coder 30B)
 "   model_inst:       instruction model name (optional, recommended: gpt-oss-120b)
@@ -27,8 +29,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   stop_strings_fim  return the result immediately as soon as any of these strings are encountered in the generated text for FIM completions
 "   stop_strings_inst return the result immediately as soon as any of these strings are encountered in the generated text for instruction completions
 "   n_cmpl:           number of completions to cache per position (ring buffer, default: 1)
-"   t_max_prompt_ms:  max alloted time for the prompt processing (TODO: not yet supported)
-"   t_max_predict_ms: max alloted time for the prediction
+"   t_max_prompt_ms:  max allowed time for the prompt processing (TODO: not yet supported)
+"   t_max_predict_ms: max allowed time for the prediction
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
 "   info_compact:     info message length (0 - full, 1 - short ms and t/s, 2 - remove t/s, 3 - also remove e:, q:, C:, 4 - only c: and r:)
 "   auto_fim:         trigger FIM completion automatically on cursor movement
@@ -55,13 +57,13 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "
 " keymaps parameters (empty string to disable):
 "
-"   keymap_fim_trigger:     keymap to trigger the completion, default: <C-F>
+"   keymap_fim_trigger:     keymap to trigger the completion, default: <leader>llf
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
-"   keymap_fim_accept_word: keymap to accept word suggestion, default: <C-B>
+"   keymap_fim_accept_word: keymap to accept word suggestion, default: <leader>ll]
 "   keymap_fim_next:        keymap to cycle to next completion,  default: <C-J>
 "   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-K>
-"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: null
+"   keymap_debug_toggle:    keymap to toggle the debug pane,  default: <leader>lld
 "   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
 "   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
 "   keymap_inst_continue:   keymap to continue the instruction, default: <leader>llc
@@ -73,6 +75,8 @@ let s:default_config = {
     \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
     \ 'fim_mode':               'infill',
     \ 'endpoint_base':          'http://127.0.0.1:8012',
+    \ 'profiles':               {},
+    \ 'profile':                '',
     \ 'model_fim':              '',
     \ 'model_inst':             '',
     \ 'api_key':                '',
@@ -430,6 +434,8 @@ function! llama#setup()
     command! LlamaToggle         call llama#toggle()
     command! LlamaToggleAutoFim  call llama#toggle_auto_fim()
     command! LlamaStatus         call llama#status()
+    command! -nargs=? -complete=customlist,llama#profile_complete LlamaProfile call llama#profile(<q-args>)
+    command! LlamaProfileReset call llama#profile_reset()
 
     command! -range=% LlamaInstruct call llama#inst(<line1>, <line2>)
 
@@ -495,6 +501,11 @@ function! llama#init()
         if empty(prop_type_get(s:hlgroup_inst_info))
             call prop_type_add(s:hlgroup_inst_info, {'highlight': s:hlgroup_inst_info})
         endif
+    endif
+
+    call llama_profile#restore()
+    if !empty(g:llama_config.profile)
+        call llama#profile(g:llama_config.profile, v:true, v:false)
     endif
 
     if g:llama_config.enable_at_startup
@@ -1759,14 +1770,18 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
     endif
 
     " setup accept shortcuts
+    " note: use CTRL-\ CTRL-O - plain CTRL-O is a completion key (i_CTRL-X_CTRL-O), so it is
+    "       swallowed while insert-mode completion is active and the rest of the mapping
+    "       ends up being inserted as text
+    " ref: https://github.com/ggml-org/llama.vim/issues/38
     if g:llama_config.keymap_fim_accept_full != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-O>:call llama#fim_accept(''full'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-\><C-O>:call llama#fim_accept(''full'')<CR>'
     endif
     if g:llama_config.keymap_fim_accept_line != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-O>:call llama#fim_accept(''line'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-\><C-O>:call llama#fim_accept(''line'')<CR>'
     endif
     if g:llama_config.keymap_fim_accept_word != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-O>:call llama#fim_accept(''word'')<CR>'
+        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-\><C-O>:call llama#fim_accept(''word'')<CR>'
     endif
 
     " setup cycle shortcuts (always, to prevent <C-J>/<C-K> from moving the cursor)
@@ -2460,4 +2475,49 @@ endfunction
 
 function! llama#debug_setup() abort
     return llama_debug#setup()
+endfunction
+
+" =====================================
+" Profile helpers
+" =====================================
+function! llama#profile_names() abort
+    return llama_profile#names()
+endfunction
+
+function! llama#profile_complete(arglead, cmdline, cursorpos) abort
+    return llama_profile#complete(a:arglead, a:cmdline, a:cursorpos)
+endfunction
+
+function! llama#profile(name, ...) abort
+    return call('llama_profile#select', [a:name] + a:000)
+endfunction
+
+function! llama#profile_reset() abort
+    return llama_profile#reset()
+endfunction
+
+" Called after a successful profile change. Jobs and cached responses are tied
+" to the old endpoint and must not be reused.
+function! llama#profile_changed() abort
+    let g:cache_data = {}
+    let g:cache_lru_order = []
+
+    if exists('s:current_job_fim') && s:current_job_fim != v:null
+        if s:ghost_text_nvim
+            call jobstop(s:current_job_fim)
+        elseif s:ghost_text_vim
+            call job_stop(s:current_job_fim)
+        endif
+        let s:current_job_fim = v:null
+    endif
+
+    if exists('s:inst_reqs')
+        for l:id in keys(copy(s:inst_reqs))
+            call s:inst_remove(str2nr(l:id))
+        endfor
+    endif
+
+    if exists('s:fim_hint_shown') && s:fim_hint_shown
+        call llama#fim_hide()
+    endif
 endfunction
