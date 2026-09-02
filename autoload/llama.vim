@@ -1970,6 +1970,10 @@ function! s:inst_on_response(id, job_id, data, event = v:null)
         return
     endif
 
+    if has_key(s:inst_reqs, a:id) && get(s:inst_reqs[a:id], 'completed', v:false)
+    	return
+    endif
+
     let l:content = ''
     for l:line in l:lines
         if len(l:line) > 5 && l:line[:5] ==# 'data: '
@@ -2032,10 +2036,11 @@ function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
         return
     endif
 
+    let l:req = s:inst_reqs[a:id]
+    let l:req.completed = v:true
     call s:inst_update(a:id, 'ready')
 
     " add assistant response to messages for continuation
-    let l:req = s:inst_reqs[a:id]
     call add(l:req.inst_prev, {'role': 'assistant', 'content': l:req.result})
 endfunction
 
