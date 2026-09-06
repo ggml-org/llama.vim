@@ -298,7 +298,8 @@ function! llama#status()
     let l:fim_base = substitute(g:llama_config.endpoint_fim, '/infill$', '', '')
     let l:inst_base = substitute(g:llama_config.endpoint_inst, '/v1/chat/completions$', '', '')
 
-    let s:status_messages = {'fim': '', 'inst': '', 'count': 0}
+    let s:status_messages = {'fim': '', 'inst': '', 'count': 0,
+        \ 'profile': get(g:llama_config, 'profile', '')}
 
     " If both endpoints are the same then we are running llama-server as a
     " router. Otherwise each are independent servers.
@@ -355,7 +356,9 @@ function! s:status_on_response(type, job_id, data, event = v:null)
         if a:type ==# 'both'
             let l:fim_status = s:get_model_status(g:llama_config.model_fim, l:models)
             let l:inst_status = s:get_model_status(g:llama_config.model_inst, l:models)
-            echo 'FIM model (' . g:llama_config.model_fim . '): ' . l:fim_status . ', Instruction model (' . g:llama_config.model_inst . '): ' . l:inst_status
+            echo s:status_prefix() . 'FIM model (' . g:llama_config.model_fim . '): '
+                \ . l:fim_status . ', Instruction model (' . g:llama_config.model_inst . '): '
+                \ . l:inst_status
         elseif a:type ==# 'fim'
             let l:fim_status = s:get_model_status(g:llama_config.model_fim, l:models)
             let s:status_messages.fim = 'FIM model (' . g:llama_config.model_fim . '): ' . l:fim_status
@@ -376,7 +379,7 @@ function! s:status_on_exit(type, job_id, exit_code, event = v:null)
     if a:exit_code != 0
         call llama#debug_log('status_on_exit (' . a:type . '): curl failed with exit code ' . a:exit_code)
         if a:type ==# 'both'
-            echo 'LlamaStatus: ❌ Server not reachable'
+            echo s:status_prefix() . 'LlamaStatus: ❌ Server not reachable'
         elseif a:type ==# 'fim'
             let s:status_messages.fim = 'FIM server: ❌ Not reachable'
             let s:status_messages.count += 1
@@ -389,10 +392,15 @@ function! s:status_on_exit(type, job_id, exit_code, event = v:null)
     endif
 endfunction
 
+function! s:status_prefix()
+    let l:profile = get(s:status_messages, 'profile', '')
+    return empty(l:profile) ? '' : 'Profile: ' . l:profile . ', '
+endfunction
+
 function! s:display_status_if_ready()
     " Wait for both FIM and instruction responses.
     if s:status_messages.count >= 2
-        echo s:status_messages.fim . ', ' . s:status_messages.inst
+        echo s:status_prefix() . s:status_messages.fim . ', ' . s:status_messages.inst
     endif
 endfunction
 
