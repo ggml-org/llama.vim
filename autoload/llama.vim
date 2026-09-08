@@ -594,14 +594,16 @@ function! s:chunk_sim(c0, c1)
     let l:tokens0 = split(join(a:c0, "\n"), '\W\+')
     let l:tokens1 = split(join(a:c1, "\n"), '\W\+')
 
-    let l:set0 = {}
+    let l:count0 = {}
     for l:tok in l:tokens0
-        let l:set0[l:tok] = 1
+        let l:count0[l:tok] = get(l:count0, l:tok, 0) + 1
     endfor
 
+    " Do not match the same occurrence from c0 more than once.
     let l:common = 0
     for l:tok in l:tokens1
-        if has_key(l:set0, l:tok)
+        if get(l:count0, l:tok, 0) > 0
+            let l:count0[l:tok] -= 1
             let l:common += 1
         endif
     endfor
