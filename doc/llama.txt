@@ -60,6 +60,12 @@ Commands
 		Toggle autofim for this vim/nvim session
 		Equivalent to vimscript function: `llama#toggle_auto_fim()`
 
+*:LlamaStatus*
+
+		Show FIM and instruction model availability. When a named profile
+		is selected, its name is shown before the model status.
+
+
 *:LlamaProfile*
 
 		Show the active and available named profiles. Pass a profile
