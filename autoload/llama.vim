@@ -886,7 +886,15 @@ function! s:fim_completion_apply_template(messages)
         return ''
     endif
 
-    let l:data = json_decode(l:result)
+    " ensure the response is valid JSON, like for /infill
+    if l:result !~# '^\s*{'
+        return ''
+    endif
+    try
+        let l:data = json_decode(l:result)
+    catch
+        return ''
+    endtry
     let l:prompt = get(l:data, 'prompt', '')
 
     " Log the response
