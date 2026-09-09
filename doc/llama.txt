@@ -22,7 +22,7 @@ insert mode:
 - Shift+Tab   - accept just the first line of the suggestion
 - <leader>ll] - accept just the first word of the suggestion
 - <C-J>       - cycle to next completion (when multiple are available)
-- <C-K>       - cycle to previous completion (when multiple are available)
+- <C-L>       - cycle to previous completion (when multiple are available)
 - <leader>llf - trigger FIM completion manually
 
 visual mode:
@@ -166,7 +166,7 @@ Currently the default config is:
 		    \ 'keymap_fim_accept_line': "<S-Tab>",
 		    \ 'keymap_fim_accept_word': "<leader>ll]",
 		    \ 'keymap_fim_next':        "<C-J>",
-		    \ 'keymap_fim_prev':        "<C-K>",
+		    \ 'keymap_fim_prev':        "<C-L>",
 		    \ 'keymap_inst_trigger':    "<leader>lli",
 		    \ 'keymap_inst_rerun':      "<leader>llr",
 		    \ 'keymap_inst_continue':   "<leader>llc",
@@ -267,7 +267,7 @@ keymaps parameters:
 
 - {keymap_fim_next}		keymap to cycle to next completion, default: <C-J>
 
-- {keymap_fim_prev}		keymap to cycle to previous completion, default: <C-K>
+- {keymap_fim_prev}		keymap to cycle to previous completion, default: <C-L>
 
 - {keymap_inst_trigger}		keymap to trigger instruction-based editing, default: <leader>lli
 
