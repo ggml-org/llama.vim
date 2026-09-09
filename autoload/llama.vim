@@ -60,8 +60,8 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   keymap_fim_accept_full: keymap to accept full suggestion, default: <Tab>
 "   keymap_fim_accept_line: keymap to accept line suggestion, default: <S-Tab>
 "   keymap_fim_accept_word: keymap to accept word suggestion, default: <leader>ll]
-"   keymap_fim_next:        keymap to cycle to next completion,  default: <C-J>
-"   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-L>
+"   keymap_fim_next:        keymap to cycle to next completion,  default: <C-L>
+"   keymap_fim_prev:        keymap to cycle to prev completion,  default: <C-H>
 "   keymap_debug_toggle:    keymap to toggle the debug pane,  default: <leader>lld
 "   keymap_inst_trigger:    keymap to trigger the instruction command, default: <leader>lli
 "   keymap_inst_rerun:      keymap to rerun the instruction, default: <leader>llr
@@ -98,8 +98,8 @@ let s:default_config = {
     \ 'keymap_fim_accept_full': "<Tab>",
     \ 'keymap_fim_accept_line': "<S-Tab>",
     \ 'keymap_fim_accept_word': "<leader>ll]",
-    \ 'keymap_fim_next':        "<C-J>",
-    \ 'keymap_fim_prev':        "<C-L>",
+    \ 'keymap_fim_next':        "<C-L>",
+    \ 'keymap_fim_prev':        "<C-H>",
     \ 'keymap_inst_trigger':    "<leader>lli",
     \ 'keymap_inst_rerun':      "<leader>llr",
     \ 'keymap_inst_continue':   "<leader>llc",
@@ -1492,7 +1492,7 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
         exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-\><C-O>:call llama#fim_accept(''word'')<CR>'
     endif
 
-    " setup cycle shortcuts (always, to prevent <C-J>/<C-K> from moving the cursor)
+    " setup cycle shortcuts (always, so the configured keys are consumed)
     " llama#fim_cycle returns '' early when there is nothing to cycle
     if g:llama_config.keymap_fim_next != ''
         exe 'inoremap <expr> <buffer> ' . g:llama_config.keymap_fim_next . ' llama#fim_cycle(1)'
