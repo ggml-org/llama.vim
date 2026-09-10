@@ -109,6 +109,9 @@ let s:default_config = {
     \ 'enable_at_startup':      v:true,
     \ }
 
+let s:curl_exit_could_not_connect = 7
+let s:fim_connection_error = 'llama.vim: cannot connect to the FIM server; check endpoint_fim and that llama-server is running'
+
 let llama_config = get(g:, 'llama_config', s:default_config)
 
 " rename deprecated keys in `llama_config`.
@@ -1139,7 +1142,9 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
 endfunction
 
 function! s:fim_on_exit(job_id, exit_code, event = v:null)
-    if a:exit_code != 0
+    if a:exit_code == s:curl_exit_could_not_connect
+        echom s:fim_connection_error
+    elseif a:exit_code != 0
         echom "FIM job failed with exit code: " . a:exit_code
     endif
 
