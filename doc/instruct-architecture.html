@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama.vim — Instruct-Based Editing Architecture</title>
+<style>
+:root{
+  --bg:#0d1117;--sf:#161b22;--sf2:#1262d;--sf3:#262c36;
+  --bd:#30363d;--tx:#e6edf3;--td:#8b949e;
+  --ac:#58a6ff;--a2:#f0883e;--gn:#3fb950;--rd:#f85149;
+  --pu:#bc8cff;--yl:#d29922;--cy:#39d2c0;
+  --mo:"SF Mono","Cascadia Code","Fira Code",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.7;max-width:1060px;margin:0 auto;padding:2rem 1.5rem}
+
+/* ── Headings ────────────────────────────────────── */
+h1{font-size:2rem;background:linear-gradient(135deg,var(--ac),var(--pu));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{color:var(--td);font-size:1rem;margin:.25rem 0 2.5rem}
+h2{font-size:1.35rem;color:var(--ac);margin:2.5rem 0 .8rem;padding-bottom:.4rem;border-bottom:1px solid var(--bd)}
+h3{font-size:1.08rem;color:var(--a2);margin:1.3rem 0 .5rem}
+
+/* ── Text ────────────────────────────────────────── */
+p,li{color:var(--td);margin-bottom:.45rem}
+ul,ol{padding-left:1.5rem;margin-bottom:1rem}
+code{font-family:var(--mo);background:var(--sf2);padding:.12em .35em;border-radius:4px;font-size:.86em;color:var(--cy)}
+
+/* ── Code blocks ─────────────────────────────────── */
+pre{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.1rem 1.25rem;overflow-x:auto;margin:1rem 0;font-family:var(--mo);font-size:.8rem;line-height:1.55}
+pre .c{color:var(--td)}pre .k{color:var(--pu)}pre .s{color:var(--gn)}pre .f{color:var(--ac)}pre .n{color:var(--a2)}pre .t{color:var(--cy)}pre .s{color:var(--gn)}pre .f{color:var(--ac)}pre .n{color:var(--a2)}pre .t{color:var(--cy)}
+
+/* ── Info box ────────────────────────────────────── */
+.ib{background:var(--sf);border:1px solid var(--bd);border-left:3px solid var(--ac);border-radius:0 8px 8px 0;padding:.9rem 1.15rem;margin:1rem 0}
+.ib.warn{border-left-color:var(--yl)}
+.ib code{background:var(--sf3)}
+
+/* ── Diagram container ───────────────────────────── */
+.diagram{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:1.5rem;margin:1.5rem 0;overflow-x:auto}
+
+/* ── Sequence diagram ────────────────────────────── */
+.seq{display:flex;flex-direction:column;gap:0;max-width:720px;margin:0 auto}
+.seq-row{display:flex;align-items:center;gap:0;position:relative}
+.seq-row+.seq-row{margin-top:1.5rem}
+.seq-label{width:105px;min-width:105px;font-size:.78rem;font-weight:700;text-align:right;padding-right:.75rem;font-family:var(--mo);flex-shrink:0}
+.seq-label.user{color:var(--ac)}
+.seq-label.vim{color:var(--a2)}
+.seq-label.server{color:var(--gn)}
+.seq-body{flex:1;padding-left:.5rem;display:flex;align-items:center;gap:.5rem}
+.seq-badge{font-size:.72rem;padding:.2rem .65rem;border-radius:6px;font-family:var(--mo);white-space:nowrap}
+.seq-badge.blue{background:rgba(88,166,255,.15);color:var(--ac);border:1px solid rgba(88,166,255,.25)}
+.seq-badge.orange{background:rgba(240,136,62,.15);color:var(--a2);border:1px solid rgba(240,136,62,.25)}
+.seq-badge.green{background:rgba(63,185,80,.12);color:var(--gn);border:1px solid rgba(63,185,80,.25)}
+.seq-badge.purple{background:rgba(188,140,255,.12);color:var(--pu);border:1px solid rgba(188,140,255,.25)}
+.seq-arrow{font-size:1.1rem;color:var(--td);flex-shrink:0}
+.seq-arrow.down::before{content:"↓"}
+.seq-arrow.up::before{content:"↑"}
+
+/* ── Prompt builder diagram ──────────────────────── */
+.prompt-box{max-width:680px;margin:1.2rem auto;font-family:var(--mo);font-size:.78rem;line-height:1.55}
+.prompt-section{margin-bottom:.7rem;padding:.6rem .85rem;border-radius:6px;border:1px solid var(--bd);background:var(--sf2)}
+.prompt-section .ps-header{font-weight:700;margin-bottom:.3rem;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+.prompt-section .ps-body{color:var(--td);font-size:.76rem}
+.ps-system{border-left:3px solid var(--pu)}
+.ps-system .ps-header{color:var(--pu)}
+.ps-context{border-left:3px solid var(--yl)}
+.ps-context .ps-header{color:var(--yl)}
+.ps-prefix{border-left:3px solid var(--ac)}
+.ps-prefix .ps-header{color:var(--ac)}
+.ps-selection{border-left:3px solid var(--a2)}
+.ps-selection .ps-header{color:var(--a2)}
+.ps-suffix{border-left:3px solid var(--cy)}
+.ps-suffix .ps-header{color:var(--cy)}
+.ps-user{border-left:3px solid var(--gn)}
+.ps-user .ps-header{color:var(--gn)}
+
+/* ── State machine ───────────────────────────────── */
+.states{display:flex;align-items:center;justify-content:center;gap:.6rem;flex-wrap:wrap;margin:1.5rem 0}
+.state{padding:.5rem 1rem;border-radius:8px;font-family:var(--mo);font-size:.82rem;font-weight:600;border:2px solid}
+.state.proc{background:rgba(88,166,255,.1);border-color:rgba(88,166,255,.35);color:var(--ac)}
+.state.gen{background:rgba(240,136,62,.1);border-color:rgba(240,136,62,.35);color:var(--a2)}
+.state.ready{background:rgba(63,185,80,.1);border-color:rgba(63,185,80,.35);color:var(--gn)}
+.state.done{background:rgba(139,148,158,.08);border-color:rgba(139,148,158,.25);color:var(--td)}
+.arrow{color:var(--td);font-size:1.2rem}
+
+/* ── Keymap table ────────────────────────────────── */
+table{width:100%;border-collapse:collapse;margin:1rem 0}
+th,td{padding:.55rem .85rem;text-align:left;border-bottom:1px solid var(--bd);font-size:.88rem}
+th{color:var(--ac);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td{color:var(--td)}
+td code{font-size:.82em}
+tr:hover td{background:var(--sf)}
+
+/* ── Flow steps ──────────────────────────────────── */
+.steps{counter-reset:step;list-style:none;padding-left:0}
+.steps li{counter-increment:step;padding:.7rem 0 .7rem 3.2rem;position:relative;border-bottom:1px solid rgba(48,54,61,.5)}
+.steps li::before{content:counter(step);position:absolute;left:0;top:.65rem;width:2rem;height:2rem;border-radius:50%;background:var(--sf2);border:2px solid var(--ac);color:var(--ac);text-align:center;line-height:2rem;font-size:.82rem;font-weight:700;font-family:var(--mo)}
+.steps li strong{color:var(--tx);font-size:.95rem}
+
+/* ── Vim buffer mock ─────────────────────────────── */
+.vimbuf{background:#1e1e2e;border-radius:8px;padding:1rem 1.2rem;font-family:var(--mo);font-size:.78rem;line-height:1.6;max-width:620px;margin:1.2rem auto;overflow-x:auto;border:1px solid var(--bd)}
+.vimbuf .ln{color:#555;display:inline-block;width:2.5rem;text-align:right;margin-right:1rem;user-select:none}
+.vimbuf .hl-sel{background:rgba(85,68,51,.6);display:inline;padding:0 .15rem}
+.vimbuf .virt{color:var(--gn);font-size:.72rem;display:block;padding:.1rem 0 .1rem 3.5rem;opacity:.85}
+.vimbuf .virt-sep{color:var(--td);opacity:.5}
+
+/* ── Legend ──────────────────────────────────────── */
+.legend{display:flex;gap:1.2rem;flex-wrap:wrap;justify-content:center;margin:.8rem 0}
+.legend-item{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--td)}
+.legend-swatch{width:14px;height:14px;border-radius:4px;border:1px solid var(--bd)}
+
+/* ── Responsive ──────────────────────────────────── */
+@media(max-width:600px){
+  body{padding:1rem}
+  .seq-label{width:75px;min-width:75px;font-size:.7rem}
+  .seq-badge{font-size:.65rem;padding:.15rem .45rem}
+  .prompt-box{font-size:.72rem}
+}
+</style>
+</head>
+<body>
+
+<h1>llama.vim — Instruct-Based Editing</h1>
+<p class="sub">Natural-language code refactoring powered by a local LLM</p>
+
+<!-- ════════════════════════════════════════════════
+     1. OVERVIEW
+     ════════════════════════════════════════════════ -->
+<h2>1 · Overview</h2>
+
+<p>
+  Select code in visual mode, press <code>&lt;leader&gt;lli</code>, type an instruction, and the LLM
+  returns the refactored block — streamed in real time.  You can accept, cancel, rerun, or continue
+  the conversation.
+</p>
+
+<div class="ib">
+  <strong>Core idea</strong> — The selected text, its surrounding context, and accumulated ring-buffer
+  chunks are assembled into a structured chat prompt.  The model is instructed to return <em>only</em>
+  the transformed code block, which replaces the original selection.
+</div>
+
+<!-- ════════════════════════════════════════════════
+     2. SEQUENCE DIAGRAM
+     ════════════════════════════════════════════════ -->
+<h2>2 · Interaction Sequence</h2>
+
+<div class="diagram">
+<div class="seq">
+  <!-- Step 1 -->
+  <div class="seq-row">
+    <div class="seq-label user">User</div>
+    <div class="seq-body">
+      <span class="seq-badge blue">Visual select</span>
+      <span style="color:var(--td);font-size:.78rem">highlight code block</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow down"></span></div>
+  </div>
+
+  <div class="seq-row">
+    <div class="seq-label user">User</div>
+    <div class="seq-body">
+      <span class="seq-badge blue"><code>&lt;leader&gt;lli</code></span>
+      <span style="color:var(--td);font-size:.78rem">trigger instruction</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow down"></span></div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="seq-row">
+    <div class="seq-label vim">vim</div>
+    <div class="seq-body">
+      <span class="seq-badge orange">Warm-up POST</span>
+      <span style="color:var(--td);font-size:.78rem">send context, empty instruction</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow up"></span></div>
+  </div>
+
+  <div class="seq-row">
+    <div class="seq-label server">server</div>
+    <div class="seq-body">
+      <span class="seq-badge green">cache prompt</span>
+      <span style="color:var(--td);font-size:.78rem">process &amp; cache context (n_predict=0)</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow down"></span></div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="seq-row">
+    <div class="seq-label user">User</div>
+    <div class="seq-body">
+      <span class="seq-badge blue">Type instruction</span>
+      <span style="color:var(--td);font-size:.78rem">e.g. "extract this to a function"</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow down"></span></div>
+  </div>
+
+  <!-- Step 4 -->
+  <div class="seq-row">
+    <div class="seq-label vim">vim</div>
+    <div class="seq-body">
+      <span class="seq-badge orange">Streaming POST</span>
+      <span style="color:var(--td);font-size:.78rem">messages array with full prompt</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow up"></span></div>
+  </div>
+
+  <!-- Step 5 -->
+  <div class="seq-row">
+    <div class="seq-label server">server</div>
+    <div class="seq-body">
+      <span class="seq-badge green">SSE stream</span>
+      <span style="color:var(--td);font-size:.78rem">token-by-token via data: lines</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow down"></span></div>
+  </div>
+
+  <!-- Step 6 -->
+  <div class="seq-row">
+    <div class="seq-label vim">vim</div>
+    <div class="seq-body">
+      <span class="seq-badge purple">Virtual text</span>
+      <span style="color:var(--td);font-size:.78rem">live preview below selection</span>
+    </div>
+  </div>
+
+  <div class="seq-row" style="margin-top:-.4rem">
+    <div class="seq-label"></div>
+    <div class="seq-body"><span class="seq-arrow down"></span></div>
+  </div>
+
+  <!-- Step 7 -->
+  <div class="seq-row">
+    <div class="seq-label user">User</div>
+    <div class="seq-body">
+      <span class="seq-badge blue"><code>&lt;Tab&gt;</code></span>
+      <span style="color:var(--td);font-size:.78rem">accept → replace selection</span>
+    </div>
+  </div>
+
+  <div class="seq-row">
+    <div class="seq-label user">User</div>
+    <div class="seq-body">
+      <span class="seq-badge blue"><code>&lt;leader&gt;llc</code></span>
+      <span style="color:var(--td);font-size:.78rem">continue conversation</span>
+    </div>
+  </div>
+
+  <div class="seq-row">
+    <div class="seq-label user">User</div>
+    <div class="seq-body">
+      <span class="seq-badge purple"><code>&lt;leader&gt;llr</code></span>
+      <span style="color:var(--td);font-size:.78rem">rerun same instruction</span>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     3. PROMPT BUILDER
+     ════════════════════════════════════════════════ -->
+<h2>3 · Prompt Construction</h2>
+
+<p>
+  <code>llama#inst_build()</code> assembles a <strong>system prompt</strong> with four context
+  regions and a <strong>user message</strong> containing the instruction.
+</p>
+
+<div class="prompt-box">
+  <div class="prompt-section ps-system">
+    <div class="ps-header">System Message</div>
+    <div class="ps-body">
+      You are a text-editing assistant. Respond ONLY with the result of applying<br>
+      INSTRUCTION to SELECTION given the CONTEXT. Maintain the existing text<br>
+      indentation. Do not add extra code blocks.<br><br>
+      <span style="opacity:.6">↓ structured sections follow ↓</span>
+    </div>
+  </div>
+
+  <div class="prompt-section ps-context">
+    <div class="ps-header">── CONTEXT ──────────────────────────────────────────</div>
+    <div class="ps-body">
+      <span style="opacity:.6">Ring buffer chunks (recently viewed / yanked / edited code)</span><br>
+      <span style="opacity:.4">function foo() { ... }</span><br>
+      <span style="opacity:.4">class Bar { ... }</span>
+    </div>
+  </div>
+
+  <div class="prompt-section ps-prefix">
+    <div class="ps-header">── PREFIX ───────────────────────────────────────────</div>
+    <div class="ps-body">
+      <span style="opacity:.6">Lines before the selection (up to n_prefix = 256)</span><br>
+      <span style="opacity:.4">import { something } from 'module';</span><br>
+      <span style="opacity:.4">const x = 42;</span>
+    </div>
+  </div>
+
+  <div class="prompt-section ps-selection">
+    <div class="ps-header">── SELECTION ────────────────────────────────────────</div>
+    <div class="ps-body">
+      <span style="opacity:.6">The highlighted code block (l0 … l1)</span><br>
+      <span style="opacity:.6;font-style:italic">← this is what gets replaced →</span>
+    </div>
+  </div>
+
+  <div class="prompt-section ps-suffix">
+    <div class="ps-header">── SUFFIX ───────────────────────────────────────────</div>
+    <div class="ps-body">
+      <span style="opacity:.6">Lines after the selection (up to n_suffix = 64)</span><br>
+      <span style="opacity:.4">return result;</span><br>
+      <span style="opacity:.4">}</span>
+    </div>
+  </div>
+
+  <div class="prompt-section ps-user" style="margin-top:1rem">
+    <div class="ps-header">User Message</div>
+    <div class="ps-body">
+      <strong>INSTRUCTION:</strong> extract the validation logic into a separate function
+    </div>
+  </div>
+</div>
+
+<div class="ib">
+  For <strong>continuation</strong>, <code>inst_prev</code> holds the full conversation
+  (system + all prior user/assistant turns), so the model retains context across
+  multiple refinement steps.
+</div>
+
+<!-- ════════════════════════════════════════════════
+     4. STATE MACHINE
+     ════════════════════════════════════════════════ -->
+<h2>4 · Request Lifecycle</h2>
+
+<p>Each instruction request carries a <code>status</code> field that transitions through four states:</p>
+
+<div class="states">
+  <div class="state proc">proc</div>
+  <span class="arrow">→</span>
+  <div class="state gen">gen</div>
+  <span class="arrow">→</span>
+  <div class="state ready">ready</div>
+  <span class="arrow">→</span>
+  <div class="state done">done</div>
+</div>
+
+<table>
+  <tr>
+    <th>State</th>
+    <th>When</th>
+    <th>Virtual Text</th>
+  </tr>
+  <tr>
+    <td><code>proc</code></td>
+    <td>Request sent, awaiting first token</td>
+    <td>⏳ Processing… (shows endpoint, model, instruction)</td>
+  </tr>
+  <tr>
+    <td><code>gen</code></td>
+    <td>Streaming tokens arriving</td>
+    <td>⏳ Generating: N tokens | <em>last line preview</em></td>
+  </tr>
+  <tr>
+    <td><code>ready</code></td>
+    <td>Stream complete, output buffered</td>
+    <td>✅ Ready! Full generated lines shown below selection</td>
+  </tr>
+  <tr>
+    <td><code>done</code></td>
+    <td>Accepted / cancelled — request removed</td>
+    <td>— (highlights cleared)</td>
+  </tr>
+</table>
+
+<!-- ════════════════════════════════════════════════
+     5. VIM BUFFER VISUALIZATION
+     ════════════════════════════════════════════════ -->
+<h2>5 · Buffer Visualization</h2>
+
+<p>How the instruct result appears in the editor:</p>
+
+<div class="vimbuf">
+<span class="ln"> 1</span>function validateInput(data) {
+<span class="ln"> 2</span><span class="hl-sel">  if (!data) return false;</span>
+<span class="ln"> 3</span><span class="hl-sel">  if (data.length < 3) return false;</span>
+<span class="ln"> 4</span><span class="hl-sel">  if (!data.match(/^[a-z]+$/)) return false;</span>
+<span class="ln"> 5</span><span class="hl-sel">  return true;</span>
+<span class="ln"> 6</span>}
+<span class="ln"> 7</span>
+<span class="ln"> 8</span>const result = validateInput(input);
+<div class="virt virt-sep">═══════════════════════════════════════</div>
+<div class="virt">Endpoint:    http://127.0.0.1:8012/v1/chat/completions</div>
+<div class="virt">Model:       gpt-oss-120b</div>
+<div class="virt">Instruction: extract validation checks into helpers</div>
+<div class="virt">Generating:  0012 tokens | function isEmpty(v) { return !v; }</div>
+<div class="virt virt-sep">═══════════════════════════════════════</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:rgba(85,68,51,.7)"></div> Selected block</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--gn);opacity:.4"></div> Virtual text (gen)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--a2);opacity:.4"></div> Virtual text (ready)</div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     6. ACCEPT / CANCEL / RERUN / CONTINUE
+     ════════════════════════════════════════════════ -->
+<h2>6 · Actions</h2>
+
+<table>
+  <tr><th>Key</th><th>Default</th><th>Function</th><th>Effect</th></tr>
+  <tr>
+    <td>Trigger</td><td><code>&lt;leader&gt;lli</code></td>
+    <td><code>llama#inst(l0, l1)</code></td>
+    <td>Warm-up, prompt for instruction, send streaming request</td>
+  </tr>
+  <tr>
+    <td>Accept</td><td><code>&lt;Tab&gt;</code></td>
+    <td><code>llama#inst_accept()</code></td>
+    <td>Find ready request → <code>deletebufline()</code> + <code>append()</code> with result</td>
+  </tr>
+  <tr>
+    <td>Cancel</td><td><code>&lt;Esc&gt;</code></td>
+    <td><code>llama#inst_cancel()</code></td>
+    <td>Remove request state, clear highlights and virtual text</td>
+  </tr>
+  <tr>
+    <td>Rerun</td><td><code>&lt;leader&gt;llr</code></td>
+    <td><code>llama#inst_rerun()</code></td>
+    <td>Pop last assistant turn, clear result, resend same instruction</td>
+  </tr>
+  <tr>
+    <td>Continue</td><td><code>&lt;leader&gt;llc</code></td>
+    <td><code>llama#inst_continue()</code></td>
+    <td>Prompt for next instruction, append to <code>inst_prev</code>, resend</td>
+  </tr>
+</table>
+
+<!-- ════════════════════════════════════════════════
+     7. REQUEST OBJECT
+     ════════════════════════════════════════════════ -->
+<h2>7 · Request Object Schema</h2>
+
+<p>Each request is stored in <code>s:inst_reqs[id]</code>:</p>
+
+<pre><span class="k">let</span> l:req = {
+    \ <span class="s">'id'</span>:         <span class="n">req_id</span>,       <span class="c">" unique incrementing ID</span>
+    \ <span class="s">'bufnr'</span>:      <span class="n">bufnr('%')</span>,   <span class="c">" buffer number</span>
+    \ <span class="s">'range'</span>:       [<span class="n">l0</span>, <span class="n">l1</span>],     <span class="c">" [start_line, end_line]</span>
+    \ <span class="s">'status'</span>:      <span class="s">'proc'</span>,       <span class="c">" proc → gen → ready</span>
+    \ <span class="s">'result'</span>:      <span class="s">''</span>,           <span class="c">" accumulated generated text</span>
+    \ <span class="s">'inst'</span>:        <span class="s">'instruction'</span>, <span class="c">" current instruction text</span>
+    \ <span class="s">'inst_prev'</span>:   [],           <span class="c">" full conversation history</span>
+    \ <span class="s">'job'</span>:         <span class="t">v:null</span>,       <span class="c">" curl job handle</span>
+    \ <span class="s">'n_gen'</span>:       <span class="n">0</span>,            <span class="c">" token count</span>
+    \ <span class="s">'extmark'</span>:     <span class="n">-1</span>,           <span class="c">" selection highlight extmark</span>
+    \ <span class="s">'extmark_virt'</span>: <span class="n">-1</span>,         <span class="c">" virtual text extmark</span>
+    \ }</pre>
+
+<!-- ════════════════════════════════════════════════
+     8. KEY IMPLEMENTATION DETAILS
+     ════════════════════════════════════════════════ -->
+<h2>8 · Key Implementation Details</h2>
+
+<ul>
+  <li><strong>Warm-up request</strong> — <code>llama#inst()</code> sends a zero-predict request with the context assembled before the user types the instruction.  The server caches the prompt, so the actual generation starts faster.</li>
+  <li><strong>Streaming SSE</strong> — <code>s:inst_on_response()</code> parses <code>data: {...}</code> lines, extracts <code>choices[0].delta.content</code>, and appends to <code>req.result</code> in real time.</li>
+  <li><strong>Low temperature</strong> — The instruct request uses <code>min_p=0.1</code>, <code>temperature=0.1</code> for deterministic, precise refactoring output.</li>
+  <li><strong>Conversation history</strong> — <code>inst_prev</code> is a standard chat messages array.  On continuation, the new instruction is appended and the full history is resent, enabling iterative refinement.</li>
+  <li><strong>Position tracking</strong> — <code>llama#inst_update_pos()</code> queries the extmark position to keep <code>req.range</code> accurate when edits happen nearby.</li>
+  <li><strong>Dual rendering</strong> — Neovim uses <code>nvim_buf_set_extmark()</code> with <code>virt_lines</code>; Vim 9.0+ uses <code>prop_add()</code> with <code>text_align: 'after'</code>.</li>
+  <li><strong>Accept callback</strong> — <code>s:inst_callback()</code> strips trailing empty lines, deletes the original range via <code>deletebufline()</code>, and inserts the result with <code>append()</code>.</li>
+</ul>
+
+<!-- ════════════════════════════════════════════════
+     9. ENDPOINT & CONFIGURATION
+     ════════════════════════════════════════════════ -->
+<h2>9 · Endpoint &amp; Configuration</h2>
+
+<table>
+  <tr><th>Config key</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td><code>endpoint_inst</code></td><td><code>http://127.0.0.1:8012/v1/chat/completions</code></td><td>OpenAI-compatible chat endpoint</td></tr>
+  <tr><td><code>model_inst</code></td><td><code>''</code></td><td>Model name (optional, recommended: gpt-oss-120b)</td></tr>
+  <tr><td><code>n_prefix</code></td><td><code>256</code></td><td>Lines before cursor for local context</td></tr>
+  <tr><td><code>n_suffix</code></td><td><code>64</code></td><td>Lines after cursor for local context</td></tr>
+  <tr><td><code>ring_n_chunks</code></td><td><code>16</code></td><td>Extra context chunks from ring buffer</td></tr>
+  <tr><td><code>ring_chunk_size</code></td><td><code>64</code></td><td>Lines per chunk</td></tr>
+  <tr><td><code>api_key</code></td><td><code>''</code></td><td>Authorization Bearer token (optional)</td></tr>
+</table>
+
+<div class="ib">
+  The instruct endpoint follows the <strong>OpenAI chat completions API</strong> format —
+  messages array with <code>role</code> and <code>content</code>.  This is distinct from the
+  FIM endpoint (<code>/infill</code>) which uses a custom request schema with prefix/suffix/extra.
+</div>
+
+<!-- ════════════════════════════════════════════════
+     FOOTER
+     ════════════════════════════════════════════════ -->
+<p style="text-align:center;color:var(--td);font-size:.78rem;margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--bd)">
+  llama.vim instruct-architecture — <code>autoload/llama.vim</code> lines 1400–1889
+</p>
+
+</body>
+</html>

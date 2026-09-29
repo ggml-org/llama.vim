@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llama.vim - Debug Architecture</title>
+<style>
+:root{--bg:#0d1117;--sf:#161b22;--sf2:#1c2333;--bd:#30363d;--tx:#e6edf3;--td:#8b949e;--ac:#58a6ff;--a2:#f0883e;--gn:#3fb950;--rd:#f85149;--pu:#bc8cff;--yl:#d29922;--cy:#39d2c0;--mo:"SF Mono","Cascadia Code","Fira Code",monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.6;max-width:1100px;margin:0 auto;padding:2rem}
+h1{font-size:2.2rem;background:linear-gradient(135deg,var(--ac),var(--pu));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{color:var(--td);font-size:1.05rem;margin:0.25rem 0 2rem}
+h2{font-size:1.45rem;color:var(--ac);margin:2.5rem 0 1rem;padding-bottom:.5rem;border-bottom:1px solid var(--bd)}
+h3{font-size:1.1rem;color:var(--a2);margin:1.4rem 0 .5rem}
+p,li{color:var(--td);margin-bottom:.5rem}
+ul,ol{padding-left:1.5rem;margin-bottom:1rem}
+code{font-family:var(--mo);background:var(--sf2);padding:.15em .4em;border-radius:4px;font-size:.88em;color:var(--cy)}
+pre{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem;overflow-x:auto;margin:1rem 0;font-family:var(--mo);font-size:.82rem;line-height:1.5}
+pre .c{color:var(--td)}pre .k{color:var(--pu)}pre .s{color:var(--gn)}pre .f{color:var(--ac)}pre .n{color:var(--a2)}pre .t{color:var(--cy)}
+.ib{background:var(--sf);border:1px solid var(--bd);border-left:3px solid var(--ac);border-radius:0 8px 8px 0;padding:1rem 1.25rem;margin:1rem 0}
+.ib.w{border-left-color:var(--yl)}.ib.g{border-left-color:var(--gn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1rem 0}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem}
+.card h3{margin-top:0;font-size:1rem}
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.85rem}
+th{background:var(--sf2);color:var(--ac);text-align:left;padding:.6rem 1rem;border-bottom:2px solid var(--bd)}
+td{padding:.5rem 1rem;border-bottom:1px solid var(--bd);color:var(--td)}
+.tag{display:inline-block;font-family:var(--mo);font-size:.7rem;padding:.15em .5em;border-radius:12px;margin-right:.3rem}
+.tag.a{background:rgba(88,166,255,.15);color:var(--ac)}.tag.c{background:rgba(240,136,62,.15);color:var(--a2)}.tag.r{background:rgba(63,185,80,.15);color:var(--gn)}.tag.p{background:rgba(188,140,255,.15);color:var(--pu)}.tag.y{background:rgba(210,153,34,.15);color:var(--yl)}
+.divider{height:1px;background:var(--bd);margin:2.5rem 0}
+.toc{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem 1.5rem;margin-bottom:2rem}
+.toc h3{margin-top:0;font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;color:var(--td)}
+.toc ul{list-style:none;padding:0;columns:2;column-gap:2rem}
+.toc li{padding:.15rem 0;break-inside:avoid}
+.toc a{color:var(--ac);text-decoration:none;font-size:.88rem}
+.toc a:hover{text-decoration:underline}
+
+/* Flow diagram */
+.fc{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:2rem;margin:1.5rem 0;overflow-x:auto}
+.fl{display:flex;flex-direction:column;align-items:center;gap:0;min-width:500px}
+.fn{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:.7rem 1.4rem;text-align:center;font-family:var(--mo);font-size:.82rem;max-width:420px;width:100%}
+.fn.tr{border-color:var(--yl);color:var(--yl)}.fn.ca{border-color:var(--ac);color:var(--ac)}.fn.rq{border-color:var(--a2);color:var(--a2)}.fn.re{border-color:var(--gn);color:var(--gn)}.fn.sr{border-color:var(--pu);color:var(--pu)}
+.fa{width:3px;height:28px;background:var(--tx);position:relative;opacity:.35;border-radius:2px}
+.fa::after{content:"▼";position:absolute;bottom:-10px;left:50%;transform:translateX(-50%);color:var(--tx);font-size:.9rem;opacity:.5}
+
+/* Timeline */
+.tl{position:relative;padding-left:30px;margin:1.5rem 0}
+.tl::before{content:'';position:absolute;left:12px;top:0;bottom:0;width:2px;background:var(--bd)}
+.tl-i{position:relative;margin-bottom:1.25rem;padding-left:1rem}
+.tl-i::before{content:'';position:absolute;left:-24px;top:6px;width:10px;height:10px;border-radius:50%;border:2px solid}
+.tl-i.l1::before{border-color:var(--ac);background:rgba(88,166,255,.2)}
+.tl-i.l2::before{border-color:var(--a2);background:rgba(240,136,62,.2)}
+.tl-i.l3::before{border-color:var(--gn);background:rgba(63,185,80,.2)}
+.tl-i.l4::before{border-color:var(--pu);background:rgba(188,140,255,.2)}
+.tl-i.l5::before{border-color:var(--yl);background:rgba(210,153,34,.2)}
+.tl-i h4{font-size:.92rem;margin-bottom:.2rem}
+.tl-i p{font-size:.82rem;margin:0}
+
+/* Log entry demo */
+.log-demo{background:var(--sf);border:1px solid var(--bd);border-radius:8px;overflow:hidden;margin:1rem 0}
+.log-demo-header{background:var(--sf2);padding:.5rem 1rem;font-family:var(--mo);font-size:.75rem;color:var(--td);border-bottom:1px solid var(--bd)}
+.log-demo-body{padding:.75rem 1rem;font-family:var(--mo);font-size:.8rem;line-height:1.8}
+.log-entry{display:flex;gap:.5rem;align-items:baseline}
+.log-ts{color:var(--yl);min-width:55px;flex-shrink:0}
+.log-sep{color:var(--td);opacity:.5}
+.log-msg{color:var(--tx)}
+.log-msg-dtl{color:var(--a2)}
+.log-fold{color:var(--pu)}
+.log-detail{padding-left:1.5rem;color:var(--td);font-size:.75rem}
+
+/* Module boxes */
+.mod-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;margin:1rem 0}
+.mod-box{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:1.25rem}
+.mod-box h3{margin-top:0;font-family:var(--mo);font-size:.9rem}
+.mod-box ul{list-style:none;padding:0;margin:0}
+.mod-box li{padding:.3rem 0;font-size:.82rem;font-family:var(--mo);border-bottom:1px solid var(--bd)}
+.mod-box li:last-child{border-bottom:none}
+.mod-box .f{color:var(--ac)}
+.mod-box .r{color:var(--rd)}
+
+/* State diagram */
+.state-row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:.5rem 0;font-family:var(--mo);font-size:.8rem}
+.state-box{padding:.35rem .75rem;border-radius:6px;border:1px solid}
+.state-box.s1{border-color:var(--ac);background:rgba(88,166,255,.1);color:var(--ac)}
+.state-box.s2{border-color:var(--gn);background:rgba(63,185,80,.1);color:var(--gn)}
+.state-box.s3{border-color:var(--a2);background:rgba(240,136,62,.1);color:var(--a2)}
+.state-box.s4{border-color:var(--pu);background:rgba(188,140,255,.1);color:var(--pu)}
+.state-box.s5{border-color:var(--yl);background:rgba(210,153,34,.1);color:var(--yl)}
+.state-arrow{color:var(--td);font-size:1rem}
+.state-label{color:var(--td);font-size:.7rem}
+
+/* Emit table */
+.emit-table{width:100%;border-collapse:collapse;margin:1rem 0}
+.emit-table th{background:var(--sf2);color:var(--ac);text-align:left;padding:.6rem 1rem;border-bottom:2px solid var(--bd);font-size:.8rem}
+.emit-table td{padding:.5rem 1rem;border-bottom:1px solid var(--bd);font-size:.82rem;color:var(--td);vertical-align:top}
+.emit-table code{font-size:.78rem}
+</style>
+</head>
+<body>
+
+<h1>llama.vim — Debug Architecture</h1>
+<p class="sub">In-memory logging → deferred buffer flush → foldable scratch pane</p>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#modules">Modules &amp; Functions</a></li>
+    <li><a href="#log-flow">Log Entry Flow</a></li>
+    <li><a href="#flush">Deferred Flush</a></li>
+    <li><a href="#buffer">Debug Buffer</a></li>
+    <li><a href="#wrappers">Plugin Wrappers</a></li>
+    <li><a href="#emit-points">Emit Points</a></li>
+    <li><a href="#ui">User Interface</a></li>
+    <li><a href="#design">Design Decisions</a></li>
+  </ul>
+</div>
+
+<!-- Overview -->
+<h2 id="overview">Overview</h2>
+
+<p>The debug subsystem provides a <strong>timestamped, foldable log pane</strong> that tracks key events in the plugin lifecycle — initialization, FIM completions, instruction requests, and errors.</p>
+
+<p>Logs are collected in-memory and <strong>flushed to a scratch buffer</strong> on a deferred timer to avoid UI thrashing from rapid log writes.</p>
+
+<div class="fc">
+  <div class="fl">
+    <div class="fn sr">Plugin event fires</div>
+    <div class="fa"></div>
+    <div class="fn tr">call llama#debug_log(msg, details)</div>
+    <div class="fa"></div>
+    <div class="fn ca">llama_debug#log(msg, details)</div>
+    <div class="fa"></div>
+    <div class="fn rq">Build log block → prepend to s:debug.log</div>
+    <div class="fa"></div>
+    <div class="fn sr">s:flush_sched() — 50 ms deferred timer</div>
+    <div class="fa"></div>
+    <div class="fn re">s:flush() — write to scratch buffer</div>
+  </div>
+</div>
+
+<div class="ib g">
+  <strong>Two modules</strong> — <code>autoload/llama_debug.vim</code> (backend) and <code>autoload/llama.vim</code> (thin wrappers).
+</div>
+
+<!-- Modules -->
+<h2 id="modules">Modules &amp; Functions</h2>
+
+<div class="mod-grid">
+
+  <div class="mod-box">
+    <h3>autoload/<span class="f">llama_debug.vim</span></h3>
+    <ul>
+      <li><span class="f">llama_debug#log(msg, ...)</span> — append log entry</li>
+      <li><span class="f">llama_debug#toggle()</span> — open / close pane</li>
+      <li><span class="f">llama_debug#clear()</span> — clear log &amp; buffer</li>
+      <li><span class="f">llama_debug#setup()</span> — register commands</li>
+      <li class="r">s:ensure_buf()</li> — create scratch buffer</li>
+      <li class="r">s:flush_sched()</li> — schedule deferred flush</li>
+      <li class="r">s:flush()</li> — write log to buffer</li>
+    </ul>
+  </div>
+
+  <div class="mod-box">
+    <h3>autoload/<span class="f">llama.vim</span> (wrappers)</h3>
+    <ul>
+      <li><span class="f">llama#debug_log(msg, ...)</span> → <span class="r">llama_debug#log</span></li>
+      <li><span class="f">llama#debug_toggle()</span> → <span class="r">llama_debug#toggle</span></li>
+      <li><span class="f">llama#debug_clear()</span> → <span class="r">llama_debug#clear</span></li>
+      <li><span class="f">llama#debug_setup()</span> → <span class="r">llama_debug#setup</span></li>
+    </ul>
+  </div>
+
+</div>
+
+<!-- Log Entry Flow -->
+<h2 id="log-flow">Log Entry Flow</h2>
+
+<h3>1. Entry creation</h3>
+
+<p>When <code>llama_debug#log(msg, details)</code> is called:</p>
+
+<div class="tl">
+  <div class="tl-i l1">
+    <h4>Normalize details</h4>
+    <p>If the optional second argument is not a list, it is converted via <code>split(string(details), "\n")</code></p>
+  </div>
+  <div class="tl-i l2">
+    <h4>Build header</h4>
+    <p>Format: <code>HH:MM:SS | msg</code>. If details exist, first detail line is appended: <code>HH:MM:SS | msg | details[0]</code></p>
+  </div>
+  <div class="tl-i l3">
+    <h4>Build block</h4>
+    <p>With details → foldable block: <code>header {{{</code>, detail lines, <code>}}}</code>. Without details → single line.</p>
+  </div>
+  <div class="tl-i l4">
+    <h4>Prepend to s:debug.log</h4>
+    <p>Blocks are inserted at index 0 (newest first). Capped at <code>s:debug.max_lines</code> (1024) entries.</p>
+  </div>
+  <div class="tl-i l5">
+    <h4>Schedule flush</h4>
+    <p>Set <code>s:debug.dirty = 1</code> and call <code>s:flush_sched()</code> if no flush is already pending.</p>
+  </div>
+</div>
+
+<h3>2. Log block structure</h3>
+
+<p>Each log block is a <code>list</code> of strings:</p>
+
+<div class="log-demo">
+  <div class="log-demo-header">[llama.vim-debug]</div>
+  <div class="log-demo-body">
+    <div class="log-entry">
+      <span class="log-ts">14:23:01</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">fim_on_response</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg-dtl">int main() {</span>
+      <span class="log-fold">{{{</span>
+    </div>
+    <div class="log-detail">&nbsp;&nbsp;return 0;</div>
+    <div class="log-detail">&nbsp;&nbsp;}</div>
+    <div class="log-entry"><span class="log-fold">}}}</span></div>
+    <br>
+    <div class="log-entry">
+      <span class="log-ts">14:22:58</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">plugin enabled</span>
+    </div>
+    <br>
+    <div class="log-entry">
+      <span class="log-ts">14:22:57</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">llama.vim initializing ...</span>
+    </div>
+  </div>
+</div>
+
+<!-- Deferred Flush -->
+<h2 id="flush">Deferred Flush</h2>
+
+<p>Rapid successive <code>llama#debug_log()</code> calls (e.g., from streamed instruction responses) would thrash the UI if each write triggered an immediate buffer update. The deferred flush pattern coalesces these:</p>
+
+<div class="fc">
+  <div class="fl">
+    <div class="fn tr">llama_debug#log() called × N</div>
+    <div class="fa"></div>
+    <div class="fn ca">s:debug.dirty = 1, s:flush_sched()</div>
+    <div class="fa"></div>
+    <div class="fn sr" style="max-width:500px">First call: timer_start(50ms, → s:flush()).<br>Subsequent calls: s:debug.flush != -1 → <strong>no-op</strong></div>
+    <div class="fa"></div>
+    <div class="fn rq">50 ms elapsed → s:flush()</div>
+    <div class="fa"></div>
+    <div class="fn re" style="max-width:500px">Flatten all blocks → setbufline(debug_bufnr, 1, flat_lines)<br>Reset dirty = 0, flush = -1</div>
+  </div>
+</div>
+
+<div class="ib">
+  <strong>Key insight:</strong> Multiple log calls within the 50ms window share a single buffer write. The <code>s:debug.flush</code> timer ID is the guard — if it's <code>-1</code>, a new timer is created; otherwise the call returns immediately.
+</div>
+
+<div style="margin-top:.5rem"><pre><span class="c">" flush_sched — coalesces rapid writes</span>
+<span class="k">function</span> <span class="f">s:flush_sched</span>() <span class="k">abort</span>
+    <span class="k">if</span> s:debug.flush != -1
+        <span class="k">return</span>          <span class="c">" timer already pending → skip</span>
+    <span class="k">endif</span>
+    <span class="k">let</span> s:debug.flush = timer_start(<span class="n">50</span>, {-&gt; s:flush()}, {'repeat': 0})
+<span class="k">endfunction</span></pre></div>
+
+<!-- Debug Buffer -->
+<h2 id="buffer">Debug Buffer</h2>
+
+<h3>Buffer properties</h3>
+
+<table>
+  <tr><th>Setting</th><th>Value</th><th>Purpose</th></tr>
+  <tr><td><code>buftype</code></td><td><code>nofile</code></td><td>No associated file on disk</td></tr>
+  <tr><td><code>bufhidden</code></td><td><code>hide</code></td><td>Hidden on close, not destroyed</td></tr>
+  <tr><td><code>noswapfile</code></td><td>—</td><td>No swap file created</td></tr>
+  <tr><td><code>nomodifiable</code></td><td>—</td><td>Read-only (toggled for writes)</td></tr>
+  <tr><td><code>foldmethod</code></td><td><code>marker</code></td><td>Fold on <code>{{{/}}}</code> delimiters</td></tr>
+  <tr><td><code>foldlevel</code></td><td><code>0</code></td><td>All folds closed by default</td></tr>
+  <tr><td><code>foldcolumn</code></td><td><code>2</code></td><td>Show fold column indicator</td></tr>
+  <tr><td><code>file</code></td><td><code>[llama.vim-debug]</code></td><td>Buffer name</td></tr>
+</table>
+
+<h3>State object</h3>
+
+<pre><span class="k">let</span> s:debug = {
+    \ <span class="s">'bufnr'</span>:     -1,       <span class="c">" buffer number (-1 = not created)</span>
+    \ <span class="s">'log'</span>:       [],       <span class="c">" list of log blocks (each block = list of strings)</span>
+    \ <span class="s">'max_lines'</span>: 1024,     <span class="c">" cap on number of log blocks</span>
+    \ <span class="s">'flush'</span>:     -1,       <span class="c">" timer ID (-1 = no flush pending)</span>
+    \ <span class="s">'dirty'</span>:      1,       <span class="c">" flag: log changed since last flush</span>
+    \ }</pre>
+
+<h3>Buffer lifecycle</h3>
+
+<div class="state-row">
+  <span class="state-box s1">bufnr = -1</span>
+  <span class="state-arrow">→</span>
+  <span class="state-label">s:ensure_buf()</span>
+  <span class="state-arrow">→</span>
+  <span class="state-box s2">botright new</span>
+  <span class="state-arrow">→</span>
+  <span class="state-label">s write to</span>
+  <span class="state-arrow">→</span>
+  <span class="state-box s3">setbufline()</span>
+  <span class="state-arrow">→</span>
+  <span class="state-label">user closes</span>
+  <span class="state-arrow">→</span>
+  <span class="state-box s4">bufhidden=hide</span>
+  <span class="state-arrow">→</span>
+  <span class="state-label">:LlamaDebugToggle</span>
+  <span class="state-arrow">→</span>
+  <span class="state-box s5">botright sbuffer</span>
+</div>
+
+<!-- Wrappers -->
+<h2 id="wrappers">Plugin Wrappers</h2>
+
+<p>The main <code>autoload/llama.vim</code> module delegates all debug operations to the dedicated backend:</p>
+
+<pre><span class="c">" autoload/llama.vim — thin delegation layer</span>
+
+<span class="k">function!</span> <span class="f">llama#debug_log</span>(msg, ...) <span class="k">abort</span>
+    <span class="k">return</span> <span class="f">call</span>(<span class="s">'llama_debug#log'</span>, [a:msg] + a:000)
+<span class="k">endfunction</span>
+
+<span class="k">function!</span> <span class="f">llama#debug_toggle</span>() <span class="k">abort</span>
+    <span class="k">return</span> llama_debug#toggle()
+<span class="k">endfunction</span>
+
+<span class="k">function!</span> <span class="f">llama#debug_clear</span>() <span class="k">abort</span>
+    <span class="k">return</span> llama_debug#clear()
+<span class="k">endfunction</span>
+
+<span class="k">function!</span> <span class="f">llama#debug_setup</span>() <span class="k">abort</span>
+    <span class="k">return</span> llama_debug#setup()
+<span class="k">endfunction</span></pre>
+
+<div class="ib g">
+  This separation keeps the debug logic isolated. The main plugin code simply calls <code>llama#debug_log()</code> wherever diagnostics are needed, without knowing about buffers, timers, or folds.
+</div>
+
+<!-- Emit Points -->
+<h2 id="emit-points">Emit Points</h2>
+
+<p>Debug logs are emitted at key moments throughout the plugin lifecycle:</p>
+
+<table class="emit-table">
+  <tr><th>Function</th><th>Message</th><th>Details</th><th>Tag</th></tr>
+  <tr>
+    <td><code>llama#init()</code></td>
+    <td><code>llama.vim initializing ...</code></td>
+    <td>—</td>
+    <td><span class="tag a">startup</span></td>
+  </tr>
+  <tr>
+    <td><code>llama#enable()</code></td>
+    <td><code>plugin enabled</code></td>
+    <td>—</td>
+    <td><span class="tag a">lifecycle</span></td>
+  </tr>
+  <tr>
+    <td><code>llama#disable()</code></td>
+    <td><code>plugin disabled</code></td>
+    <td>—</td>
+    <td><span class="tag a">lifecycle</span></td>
+  </tr>
+  <tr>
+    <td><code>s:fim_on_response()</code></td>
+    <td><code>fim_on_response</code></td>
+    <td>Generated content from server</td>
+    <td><span class="tag c">FIM</span></td>
+  </tr>
+  <tr>
+    <td><code>llama#inst()</code></td>
+    <td><code>inst_send | {instruction}</code></td>
+    <td>—</td>
+    <td><span class="tag r">instruct</span></td>
+  </tr>
+  <tr>
+    <td><code>llama#inst_send()</code></td>
+    <td><code>inst_send</code></td>
+    <td>Full messages list (JSON)</td>
+    <td><span class="tag r">instruct</span></td>
+  </tr>
+  <tr>
+    <td><code>s:inst_on_response()</code></td>
+    <td><code>inst_on_response parse error</code></td>
+    <td>Malformed response line</td>
+    <td><span class="tag p">error</span></td>
+  </tr>
+  <tr>
+    <td><code>llama#inst_rerun()</code></td>
+    <td><code>inst_rerun</code></td>
+    <td>—</td>
+    <td><span class="tag r">instruct</span></td>
+  </tr>
+  <tr>
+    <td><code>llama#inst_continue()</code></td>
+    <td><code>inst_continue | {instruction}</code></td>
+    <td>—</td>
+    <td><span class="tag r">instruct</span></td>
+  </tr>
+</table>
+
+<!-- UI -->
+<h2 id="ui">User Interface</h2>
+
+<h3>Triggering</h3>
+
+<div class="grid">
+  <div class="card">
+    <h3>Keyboard</h3>
+    <p><code>&lt;leader&gt;lld</code> (default, configurable via <code>keymap_debug_toggle</code>)</p>
+  </div>
+  <div class="card">
+    <h3>Commands</h3>
+    <p><code>:LlamaDebugToggle</code> — open/close pane<br><code>:LlamaDebugClear</code> — clear logs</p>
+  </div>
+  <div class="card">
+    <h3>API</h3>
+    <p><code>call llama#debug_toggle()</code><br><code>call llama#debug_clear()</code></p>
+  </div>
+</div>
+
+<h3>Pane layout</h3>
+
+<div class="log-demo">
+  <div class="log-demo-header">botright new — [llama.vim-debug] — nofile — nomodifiable</div>
+  <div class="log-demo-body">
+    <div class="log-entry">
+      <span class="log-ts">14:23:01</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">fim_on_response</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg-dtl">int main() {</span>
+      <span class="log-fold">{{{</span>
+    </div>
+    <div class="log-detail">&nbsp;&nbsp;return 0;</div>
+    <div class="log-detail">&nbsp;&nbsp;}</div>
+    <div class="log-entry"><span class="log-fold">}}}</span></div>
+    <br>
+    <div class="log-entry">
+      <span class="log-ts">14:22:58</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">inst_send | refactor this function</span>
+    </div>
+    <br>
+    <div class="log-entry">
+      <span class="log-ts">14:22:58</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">plugin enabled</span>
+    </div>
+    <br>
+    <div class="log-entry">
+      <span class="log-ts">14:22:57</span>
+      <span class="log-sep">|</span>
+      <span class="log-msg">llama.vim initializing ...</span>
+    </div>
+  </div>
+</div>
+
+<!-- Design Decisions -->
+<h2 id="design">Design Decisions</h2>
+
+<div class="grid">
+  <div class="card">
+    <h3><span class="tag a">1</span> In-memory log</h3>
+    <p>All log blocks are kept in <code>s:debug.log</code> as a list of lists. The buffer is only a rendering target, not the source of truth. This allows efficient prepend operations and easy clearing.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag c">2</span> Deferred flush</h3>
+    <p>A 50ms timer coalesces rapid writes. Multiple <code>log()</code> calls within the window share one <code>setbufline()</code> call, avoiding buffer thrashing.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag r">3</span> Foldable blocks</h3>
+    <p>Multi-line details use <code>{{{/}}}</code> fold markers. Folds start closed (<code>foldlevel=0</code>), keeping the log compact while preserving detail on demand.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag p">4</span> Newest first</h3>
+    <p>Log blocks are <code>insert()</code>-ed at index 0. The most recent entries appear at the top of the buffer — where the user's eyes naturally start.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag y">5</span> Ring buffer cap</h3>
+    <p><code>s:debug.max_lines</code> (1024) caps the in-memory log to prevent unbounded growth during long sessions.</p>
+  </div>
+  <div class="card">
+    <h3><span class="tag a">6</span> Module separation</h3>
+    <p>Debug logic is isolated in <code>llama_debug.vim</code>. The main plugin delegates through thin wrappers, keeping concerns cleanly separated.</p>
+  </div>
+</div>
+
+<div class="divider"></div>
+<p style="text-align:center;color:var(--td);font-size:.8rem;margin-top:1rem">llama.vim debug architecture reference</p>
+
+</body>
+</html>
