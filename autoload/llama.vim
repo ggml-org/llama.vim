@@ -33,6 +33,7 @@ highlight default llama_hl_fim_info guifg=#77ff2f ctermfg=119
 "   show_info:        show extra info about the inference (0 - disabled, 1 - statusline, 2 - inline)
 "   info_compact:     info message length (0 - full, 1 - short ms and t/s, 2 - remove t/s, 3 - also remove e:, q:, C:, 4 - only c: and r:)
 "   auto_fim:         trigger FIM completion automatically on cursor movement
+"   fim_debounce_ms:  delay (in ms) before retrying a FIM completion when one is already in progress
 "   max_line_suffix:  do not auto-trigger FIM completion if there are more than this number of characters to the right of the cursor
 "   max_cache_keys:   max number of cached completions to keep in result_cache
 "   enable_at_startup: enable llama.vim functionality at startup (default: v:true)
@@ -88,6 +89,7 @@ let s:default_config = {
     \ 'show_info':              2,
     \ 'info_compact':           3,
     \ 'auto_fim':               v:true,
+    \ 'fim_debounce_ms':        100,
     \ 'max_line_suffix':        8,
     \ 'max_cache_keys':         250,
     \ 'ring_n_chunks':          16,
@@ -913,7 +915,7 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
             let s:timer_fim = -1
         endif
 
-        let s:timer_fim = timer_start(100, {-> llama#fim(a:pos_x, a:pos_y, v:true, a:prev, a:use_cache)})
+        let s:timer_fim = timer_start(g:llama_config.fim_debounce_ms, {-> llama#fim(a:pos_x, a:pos_y, v:true, a:prev, a:use_cache)})
         return
     endif
 
