@@ -139,6 +139,8 @@ Currently the default config is:
 		let s:default_config = {
 		    \ 'endpoint_fim':           'http://127.0.0.1:8012/infill',
 		    \ 'endpoint_inst':          'http://127.0.0.1:8012/v1/chat/completions',
+		    \ 'fim_mode':               'infill',
+		    \ 'endpoint_base':          'http://127.0.0.1:8012',
 		    \ 'profiles':               {},
 		    \ 'profile':                '',
 		    \ 'model_fim':              '',
@@ -180,6 +182,14 @@ Currently the default config is:
 - {endpoint_fim}		llama.cpp server endpoint for FIM completion
 
 - {endpoint_inst}		llama.cpp server endpoint for instruction completion
+
+- {fim_mode}			FIM completion mode:
+					'infill' (default) - use the native /infill endpoint,
+					'completion' - emulate FIM via /apply-template + /completion
+					(useful for models without a FIM template)
+
+- {endpoint_base}		base URL of the llama.cpp server, used by fim_mode
+					'completion' for the /apply-template and /completion endpoints
 
 - {profiles}		    dictionary of named llama.cpp server base URLs. Selecting
 						a profile sets both endpoint_fim and endpoint_inst.
